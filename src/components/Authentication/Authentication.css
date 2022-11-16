@@ -1,0 +1,12 @@
+.authentication-container {
+    max-width: 500px;
+    margin: 0 auto;
+    margin-top: 48px;
+}
+
+.actions {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+    justify-content: end;
+}
