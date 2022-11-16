@@ -1,0 +1,26 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+/lambdas/*/*.zip
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.development
+.env.test.local
+.env.production.local
+cfn_nag_output.txt
+npm_audit_results.txt
+.vscode
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
