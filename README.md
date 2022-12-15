@@ -143,3 +143,7 @@ Any contact that inputs a score lower than the defined threshold to that questio
 15. The task is received by a supervisor and contains the details of the interaction that was poorly rated.
 
 ![Simple survey example task](/img/simple-survey-example-task-description.png)
+
+16. You can visualise the aggregated results for your survey using the Contact Surveys for Amazon Connect application. Simply select the survey, and navigate to the **Results** tab. You can also export the individual results by clicking on the **Export** button.
+
+![Simple survey example results](/img/simple-survey-example-results.png)
