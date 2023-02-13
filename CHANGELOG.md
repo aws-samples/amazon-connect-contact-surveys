@@ -10,5 +10,6 @@ Intial commit prior to public release.
 
 ## [1.0.0] - Initial release
 
-
+## [1.0.1] - API Gateway logging fix
+Fix for issue with deployment when users try to deploy in an AWS account that has not been configured for API Gateway logging.
 
