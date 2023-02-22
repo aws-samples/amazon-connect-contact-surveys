@@ -17,6 +17,24 @@ Parameters:
     AdminEmailAddress:
         Type: String
         Description: "The email address for the initial user of the solution"
+    CreateAPILevelCloudWatchRole:
+        Type: String
+        Description: "The email address for the initial user of the solution"
+        Default: "TRUE"
+        AllowedValues:
+            - "TRUE"
+            - "FALSE"
+
+#################
+### CONDITIONS ##
+#################
+
+Conditions:
+
+    deployAccountLevelAPICloudWatchRole: !Equals
+        - !Ref CreateAPILevelCloudWatchRole
+        - "TRUE"
+
 
 Resources:
     UserPool:
@@ -783,6 +801,29 @@ Resources:
                   HttpMethod: "*"
                   LoggingLevel: "ERROR"
                   ResourcePath: "/*"
+
+# Add CloudWatch Logging Role to the API Gateway Settings for the account.
+    ApiCWLRoleArn:
+        Type: AWS::ApiGateway::Account
+        Condition: deployAccountLevelAPICloudWatchRole
+        Properties: 
+            CloudWatchRoleArn: !GetAtt APIGatewayCloudWatchRole.Arn
+
+# IAM Role for API Gateway + CloudWatch Logging
+    APIGatewayCloudWatchRole:
+        Type: AWS::IAM::Role
+        Condition: deployAccountLevelAPICloudWatchRole
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                    Action: 'sts:AssumeRole'
+                    Effect: Allow
+                    Principal:
+                        Service: apigateway.amazonaws.com
+            Path: /
+            ManagedPolicyArns:
+            - 'arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs'
 
     ApiResultsOptionsMethod:
         Type: AWS::ApiGateway::Method
