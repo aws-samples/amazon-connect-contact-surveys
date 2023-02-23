@@ -732,6 +732,27 @@ Resources:
             RestApiId: !Ref SurveysApiGateway
             Type: COGNITO_USER_POOLS
 
+    ApiGatewayLoggingRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service: apigateway.amazonaws.com
+                      Action: sts:AssumeRole
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+    ApiGatewayLoggingRoleSetup:
+        Type: AWS::ApiGateway::Account
+        DependsOn: 
+            - SurveysApiGateway
+            - ApiGatewayLoggingRole
+        Properties: 
+          CloudWatchRoleArn: !GetAtt ApiGatewayLoggingRole.Arn
+
     SurveysApiGateway:
         Type: AWS::ApiGateway::RestApi
         Properties:
@@ -752,6 +773,7 @@ Resources:
         Type: AWS::ApiGateway::Stage
         DependsOn:
             - SurveysApiGateway
+            - ApiGatewayLoggingRoleSetup
         Properties:
             RestApiId: !Ref SurveysApiGateway
             StageName: dev
