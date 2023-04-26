@@ -3,6 +3,7 @@ import {
     Button,
     Checkbox,
     Container,
+    DateRangePicker,
     ExpandableSection,
     Form,
     FormField,
@@ -39,6 +40,8 @@ const Survey: FC<SurveyProps> = (props) => {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [submitted, setSubmitted] = useState(false);
     const [results, setResults] = useState([]);
+    const [filteredResults, setFilteredResults] = useState([]);
+    const [dateRangeFilter, setDateRangeFilter] = React.useState<any>({});
 
     var appConfiguration: any = (window as any).app_configuration;
 
@@ -137,7 +140,11 @@ const Survey: FC<SurveyProps> = (props) => {
         const jwt = (await Auth.currentSession()).getIdToken().getJwtToken();
 
         axios
-            .post(appConfiguration.api_endpoint, { operation: "create", data: survey }, { headers: { "Authorization": jwt }})
+            .post(
+                appConfiguration.api_endpoint,
+                { operation: "create", data: survey },
+                { headers: { Authorization: jwt } }
+            )
             .then((data) => {
                 props.setEditable(false);
                 setSubmitted(false);
@@ -176,10 +183,10 @@ const Survey: FC<SurveyProps> = (props) => {
         let formattedResults = [];
 
         for (let i = minimum; i <= maximum; i++) {
-            if (results.filter((o) => o[`survey_result_${questionIndex + 1}`] == i).length !== 0) {
+            if (filteredResults.filter((o) => o[`survey_result_${questionIndex + 1}`] == i).length !== 0) {
                 formattedResults.push({
                     title: `Score = ${i}`,
-                    value: results.filter((o) => o[`survey_result_${questionIndex + 1}`] == i).length,
+                    value: filteredResults.filter((o) => o[`survey_result_${questionIndex + 1}`] == i).length,
                 });
             }
         }
@@ -190,15 +197,18 @@ const Survey: FC<SurveyProps> = (props) => {
     const fetchResults = async (surveyId: string) => {
         const jwt = (await Auth.currentSession()).getIdToken().getJwtToken();
 
-        console.log(jwt);
-
         axios
-            .post(appConfiguration.api_endpoint, {
-                operation: "results",
-                data: { surveyId: surveyId },
-            }, { headers: { "Authorization": jwt } } )
+            .post(
+                appConfiguration.api_endpoint,
+                {
+                    operation: "results",
+                    data: { surveyId: surveyId },
+                },
+                { headers: { Authorization: jwt } }
+            )
             .then((data) => {
                 setResults(data.data.data);
+                setFilteredResults(data.data.data);
             })
             .catch((err) => {
                 console.log(err);
@@ -242,6 +252,25 @@ const Survey: FC<SurveyProps> = (props) => {
 
         link.click();
     };
+
+    const filterResults = (value: any) => {
+        if (value !== null) {
+            if (value.endDate === "") {
+                value.endDate = value.startDate;
+            }
+
+            setDateRangeFilter(value);
+
+            let startDate = new Date(value.startDate + " 00:00:00").getTime() / 1000;
+            let endDate = value.endDate !== "" ? new Date(value.endDate + " 23:59:59").getTime() / 1000 : new Date(value.startDate + " 23:59:59").getTime() / 1000;
+            
+            let newFilteredResults = results.filter((o: any) => o.timestamp >= startDate && o.timestamp <= endDate);
+            setFilteredResults(newFilteredResults);
+        } else {
+            setFilteredResults(results);
+        }
+        
+    }
 
     return (
         <>
@@ -461,11 +490,72 @@ const Survey: FC<SurveyProps> = (props) => {
                         content: (
                             <>
                                 <SpaceBetween size="m">
-                                    <div className="flex-align-right">
-                                        <Button onClick={exportResults}>
-                                            Export
-                                        </Button>
+                                    <div className="flex-align-right" key="export-btn">
+                                        <Button onClick={exportResults}>Export</Button>
                                     </div>
+                                    <DateRangePicker
+                                        key="daterange"
+                                        onChange={({ detail }) => filterResults(detail.value)}
+                                        value={dateRangeFilter}
+                                        isValidRange={() => {
+                                            return { valid: true };
+                                        }}
+                                        dateOnly
+                                        rangeSelectorMode="absolute-only"
+                                        relativeOptions={[
+                                            {
+                                                key: "previous-24-hours",
+                                                amount: 1,
+                                                unit: "minute",
+                                                type: "relative",
+                                            },
+                                            {
+                                                key: "previous-30-minutes",
+                                                amount: 30,
+                                                unit: "minute",
+                                                type: "relative",
+                                            },
+                                            {
+                                                key: "previous-1-hour",
+                                                amount: 1,
+                                                unit: "hour",
+                                                type: "relative",
+                                            },
+                                            {
+                                                key: "previous-6-hours",
+                                                amount: 6,
+                                                unit: "hour",
+                                                type: "relative",
+                                            },
+                                        ]}
+                                        i18nStrings={{
+                                            todayAriaLabel: "Today",
+                                            nextMonthAriaLabel: "Next month",
+                                            previousMonthAriaLabel: "Previous month",
+                                            customRelativeRangeDurationLabel: "Duration",
+                                            customRelativeRangeDurationPlaceholder: "Enter duration",
+                                            customRelativeRangeOptionLabel: "Custom range",
+                                            customRelativeRangeOptionDescription: "Set a custom range in the past",
+                                            customRelativeRangeUnitLabel: "Unit of time",
+                                            formatRelativeRange: (e) => {
+                                                const t = 1 === e.amount ? e.unit : `${e.unit}s`;
+                                                return `Last ${e.amount} ${t}`;
+                                            },
+                                            formatUnit: (e, t) => (1 === t ? e : `${e}s`),
+                                            dateTimeConstraintText: "",
+                                            relativeModeTitle: "Relative range",
+                                            absoluteModeTitle: "Absolute range",
+                                            relativeRangeSelectionHeading: "Choose a range",
+                                            startDateLabel: "Start date",
+                                            endDateLabel: "End date",
+                                            startTimeLabel: "Start time",
+                                            endTimeLabel: "End time",
+                                            clearButtonLabel: "Clear and dismiss",
+                                            cancelButtonLabel: "Cancel",
+                                            applyButtonLabel: "Apply",
+                                        }}
+                                        placeholder="Filter by a date range"
+                                    />
                                     {questions.map((item, i) => (
                                         <Container
                                             key={i}
