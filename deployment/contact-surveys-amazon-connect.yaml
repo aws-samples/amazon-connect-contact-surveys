@@ -240,11 +240,6 @@ Resources:
           OwnershipControls:
             Rules:
               - ObjectOwnership: ObjectWriter
-            PublicAccessBlockConfiguration:
-                BlockPublicAcls: true
-                BlockPublicPolicy: true
-                IgnorePublicAcls: true
-                RestrictPublicBuckets: true
 
     CDNOriginIdentity:
         Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
