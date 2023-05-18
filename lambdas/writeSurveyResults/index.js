@@ -20,7 +20,8 @@ exports.handler = async (event) => {
         Item: {
             contactId: { S: event.Details.ContactData.ContactId},
             surveyId: { S: event.Details.ContactData.Attributes.surveyId },
-            ...surveyResults
+            ...surveyResults,
+            timestamp: { N: (Date.now() / 1000).toString() }
         }
     }
     

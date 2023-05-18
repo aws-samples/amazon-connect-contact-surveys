@@ -4,6 +4,7 @@ import { Auth } from "@aws-amplify/auth";
 
 import "./Authentication.css";
 import { useNavigate } from "react-router-dom";
+import { BaseKeyDetail } from "@awsui/components-react/internal/events";
 
 interface AuthenticationProps {}
 
@@ -56,6 +57,17 @@ const Authentication: FC<AuthenticationProps> = (props) => {
         });
     }
 
+    const captureEnterKey = (event: CustomEvent<BaseKeyDetail>) => {
+        if (event.detail.keyCode === 13) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            if (username !== "" && password !== "") {
+                login();
+            }
+        }
+    }
+
     return (
         <div className="authentication-container">
             <ContentLayout
@@ -78,6 +90,7 @@ const Authentication: FC<AuthenticationProps> = (props) => {
                             <FormField label="Password">
                                 <Input
                                     type="password"
+                                    onKeyDown={(event => { captureEnterKey(event) })}
                                     disabled={submitted}
                                     value={password}
                                     onChange={(event) => setPassword(event.detail.value)}
@@ -87,7 +100,7 @@ const Authentication: FC<AuthenticationProps> = (props) => {
                                 <Button disabled={submitted} variant="link" onClick={resetPassword}>
                                     I forgot my password
                                 </Button>
-                                <Button disabled={submitted} variant="primary" onClick={login}>
+                                <Button disabled={submitted || (username === "" || password === "" )} variant="primary" onClick={login}>
                                     Login
                                 </Button>
                             </div>

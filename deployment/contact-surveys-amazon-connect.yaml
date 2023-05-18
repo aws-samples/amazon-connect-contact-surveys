@@ -1,6 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "Post-contact Surveys for Amazon Connect deployment"
 
+Mappings:
+  CFTParameters:
+    S3Bucket:   
+      Name: aws-contact-center-blog
+    S3Prefix:
+      Value: amazon-connect-post-call-surveys
+
 Parameters:
     AmazonConnectInstanceARN:
         Type: String
@@ -11,14 +18,169 @@ Parameters:
     ContactFlowIdForTasks:
         Type: String
         Description: The contact flow you want generated tasks to be directed to
-    S3BucketName:
-        Type: String
-        Description: "The S3 Bucket containing the lambda deployment packages (multiple .zip)"
     AdminEmailAddress:
         Type: String
         Description: "The email address for the initial user of the solution"
 
 Resources:
+  #####################################################
+  # Artifact S3 Bucket
+  #####################################################
+    BlogArtifacts:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Delete
+      UpdateReplacePolicy: Retain
+      Properties:
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
+        BucketEncryption: 
+          ServerSideEncryptionConfiguration: 
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+  #####################################################
+  # Artifact Lambda IAM Role
+  #####################################################
+    CopyArtifactsLambdaIamRole:
+      Type: 'AWS::IAM::Role'
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - 'sts:AssumeRole'
+        Path: /
+        Policies:
+          - PolicyName: root
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - 's3:PutObject'
+                  Resource: !Sub 'arn:aws:s3:::${BlogArtifacts}/*'
+                - Effect: Allow
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:GetObjectVersion'
+                  Resource:
+                  - !Sub 
+                      - arn:aws:s3:::${S3BucketName}/*
+                      - S3BucketName: !FindInMap [CFTParameters, "S3Bucket", "Name"]
+                - Effect: Allow
+                  Action:
+                    - 's3:ListBucket'
+                    - 's3:ListBucketVersions'
+                  Resource: 
+                    - !Sub 
+                        - arn:aws:s3:::${S3BucketName}/*
+                        - S3BucketName: !FindInMap [CFTParameters, "S3Bucket", "Name"]
+                    - !Sub 'arn:aws:s3:::${BlogArtifacts}/*'
+                - Effect: Allow
+                  Action:
+                    - 's3:DeleteObject'
+                  Resource: 
+                    - !Sub 'arn:aws:s3:::${BlogArtifacts}/*'
+        ManagedPolicyArns: 
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    #####################################################
+    # Custom resource trigger to copy artifacts
+    #####################################################
+    CopyCfnStacksLambdaTrigger:
+      Type: 'Custom::CopyCfnResources'
+      Properties:
+        ServiceToken: !GetAtt CustomResourceCopySourceFunction.Arn
+        BlogArtifacts: !Ref BlogArtifacts
+        SourceBucket: !FindInMap [CFTParameters, "S3Bucket", "Name"]
+        SourcePrefix: !FindInMap [CFTParameters, "S3Prefix", "Value"]
+      DependsOn: CustomResourceCopySourceFunction
+    
+    #####################################################
+    # Copy Layer Helper Function
+    #####################################################
+    CustomResourceCopySourceFunction:
+        Type: 'AWS::Lambda::Function'
+        Properties:
+          Role: !GetAtt CopyArtifactsLambdaIamRole.Arn
+          Handler: "index.handler"
+          Runtime: "nodejs16.x"
+          Code:
+            ZipFile: |
+              // Copyright 2022 Amazon.com and its affiliates; all rights reserved. This file is Amazon Web Services Content and may not be duplicated or distributed without permission.
+              const s3 = new (require('aws-sdk')).S3();
+              const response = require('cfn-response');
+              
+              const sourceObjectArray = [
+                'frontend/static/css/main.09784eec.css',
+                'frontend/static/css/main.09784eec.css.map',
+                'frontend/static/js/787.91799eaa.chunk.js',
+                'frontend/static/js/787.91799eaa.chunk.js.map',
+                'frontend/static/js/main.3336631e.js.LICENSE.txt',
+                'frontend/static/js/main.3336631e.js.map',
+                'frontend/static/js/main.3336631e.js',
+                'frontend/static/media/ico_connect.c4b4b06e46441b63ec178326f8a9e34e.svg',
+                'frontend/asset-manifest.json',
+                'frontend/config.js',
+                'frontend/favicon.ico',
+                'frontend/favicon.png',
+                'frontend/index.html',
+                'frontend/robots.txt',
+                'uuid-layer.zip'
+              ];
+              exports.handler = async (event, context) => {
+                  const sourceBucket = event.ResourceProperties.SourceBucket;
+                  const sourcePrefix = event.ResourceProperties.SourcePrefix;
+                  console.log(event);
+                  var result = {responseStatus: 'FAILED', responseData: {Data: 'Never updated'}};
+                  try {
+                      console.log(`Received event with type ${event.RequestType}`); 
+                      if(event.RequestType === 'Create' || event.RequestType === 'Update') {
+                          copyResult = await Promise.all(
+                              sourceObjectArray.map( async (object) => {
+                                  console.log('Copying with', object, `${sourceBucket}/${sourcePrefix}/${object}`)
+                                  s3Result = await s3.copyObject({
+                                      Bucket: event.ResourceProperties.BlogArtifacts,
+                                      Key: object,
+                                      CopySource: `${sourceBucket}/${sourcePrefix}/${object}`
+                                  }).promise();
+                                  console.log(`Finished uploading File with result ${JSON.stringify(s3Result, 0, 4)}`);
+                              }),
+                          );
+                          result.responseStatus = 'SUCCESS';
+                          result.responseData['Data'] = 'Successfully uploaded files';
+                      } else if (event.RequestType === 'Delete') {
+                          cleanupResult = await Promise.all(
+                              sourceObjectArray.map( async (object) => {
+                                  s3Result = await s3.deleteObjects({
+                                      Bucket: event.ResourceProperties.BlogArtifacts,
+                                      Delete: { Objects: [{Key: object }]}
+                                  }).promise();
+                                  console.log(`Finished deleting files with result ${JSON.stringify(s3Result, 0, 4)}`);
+                              }),
+                          );                        
+                          result.responseStatus = 'SUCCESS',
+                          result.responseData['Data'] = 'Successfully deleted files';
+                      }
+                  } catch (error) {
+                      console.log(JSON.stringify(error, 0, 4));
+                      result.responseStatus = 'FAILED';
+                      result.responseData['Data'] = 'Failed to process event';
+                  } finally {
+                      return await responsePromise(event, context, result.responseStatus, result.responseData, `mainstack`);
+                  }
+              };
+              function responsePromise(event, context, responseStatus, responseData, physicalResourceId) {
+                  return new Promise(() => response.send(event, context, responseStatus, responseData, physicalResourceId));
+              }
+          Timeout: 50
+
+
+
+
     UserPool:
         Type: AWS::Cognito::UserPool
         Properties:
@@ -75,11 +237,9 @@ Resources:
     FrontEndS3Bucket:
         Type: AWS::S3::Bucket
         Properties:
-            PublicAccessBlockConfiguration:
-                BlockPublicAcls: true
-                BlockPublicPolicy: true
-                IgnorePublicAcls: true
-                RestrictPublicBuckets: true
+          OwnershipControls:
+            Rules:
+              - ObjectOwnership: ObjectWriter
 
     CDNOriginIdentity:
         Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
@@ -124,9 +284,6 @@ Resources:
         Type: "AWS::CloudFront::Distribution"
         Properties:
             DistributionConfig:
-                Logging:
-                    Bucket: !GetAtt FrontEndS3Bucket.RegionalDomainName
-                    Prefix: "logs"
                 CustomErrorResponses:
                     - ErrorCode: 404
                       ResponseCode: 200
@@ -178,14 +335,15 @@ Resources:
 
     LambdaUuidLayer:
         Type: AWS::Lambda::LayerVersion
+        DependsOn: CopyCfnStacksLambdaTrigger
         Properties:
             CompatibleArchitectures:
                 - x86_64
             CompatibleRuntimes:
                 - nodejs14.x
             Content:
-                S3Bucket: !Ref S3BucketName
-                S3Key: "uuid-layer.zip"
+                S3Bucket: !Ref BlogArtifacts
+                S3Key: 'uuid-layer.zip'
             LayerName: !Sub ${AWS::StackName}-uuid-layer
 
     LambdaWriteSurveysResults:
@@ -225,7 +383,8 @@ Resources:
                             Item: {
                                 contactId: { S: event.Details.ContactData.ContactId},
                                 surveyId: { S: event.Details.ContactData.Attributes.surveyId },
-                                ...surveyResults
+                                ...surveyResults,
+                                timestamp: { N: (Date.now() / 1000).toString() }
                             }
                         }
                         
@@ -1084,8 +1243,9 @@ Resources:
         Type: Custom::S3CustomResource
         Properties:
             ServiceToken: !GetAtt CustomResourceS3LambdaFunction.Arn
-            SourceBucket: !Ref S3BucketName
+            SourceBucket: !Ref BlogArtifacts
             DestinationBucket: !Ref FrontEndS3Bucket
+        DependsOn: CopyCfnStacksLambdaTrigger
 
     CustomResourceS3LambdaFunction:
         Type: "AWS::Lambda::Function"
@@ -1110,8 +1270,10 @@ Resources:
                                     Bucket: event.ResourceProperties.SourceBucket,
                                     Prefix: "frontend"
                                 }
-                                getBucketContent(params).then((data) => {
 
+                                console.log(params);
+
+                                getBucketContent(params).then((data) => {
                                         copyObjects(data).then((data) => {
                                                 console.log("Object copied successfully");
                                                 response.send(event, context, response.SUCCESS, {});
@@ -1270,8 +1432,12 @@ Resources:
                                 - s3:PutObject
                             Effect: Allow
                             Resource:
-                                - !Sub arn:aws:s3:::${S3BucketName}/*
-                                - !Sub arn:aws:s3:::${S3BucketName}
+                                - !Sub
+                                    - arn:aws:s3:::${S3BucketName}/*
+                                    - S3BucketName: !Ref BlogArtifacts
+                                - !Sub 
+                                    - arn:aws:s3:::${S3BucketName}
+                                    - S3BucketName: !Ref BlogArtifacts
                                 - !Sub arn:aws:s3:::${FrontEndS3Bucket}/*
                                 - !Sub arn:aws:s3:::${FrontEndS3Bucket}
                       Version: "2012-10-17"

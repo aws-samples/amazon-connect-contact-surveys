@@ -45,10 +45,12 @@ const ForgotPassword: FC<ForgotPasswordProps> = () => {
             }, 3000);
         })
         .catch(err => {
-            console.log(err);
-            setIsAlert(true);
-            alert("error", err.Message);
             setSubmitted(false);
+            
+            let errMessage = err.name === "InvalidPasswordException" ? "Password must combine uppercase, lowercase and special characters, and be at least 8 characters long." : "Unexpected error - try again later."
+
+            setIsAlert(true);
+            alert("error", errMessage);
         })
     }
 
