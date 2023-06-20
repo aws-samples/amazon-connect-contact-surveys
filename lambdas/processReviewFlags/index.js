@@ -21,7 +21,7 @@ exports.handler = async (event) => {
         console.log(`Processing ${key}`);
         if (event.Details.Parameters[`flag_question_${index + 1}`] && event.Details.Parameters[`flag_question_${index + 1}`] != '') {
             console.log(`Flag exists for ${key} with threshold ${event.Details.Parameters[`flag_question_${index + 1}`]}`);
-            if (parseInt(event.Details.ContactData.Attributes[key]) < parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
+            if (parseInt(event.Details.ContactData.Attributes[key]) <= parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
                 flagged[key] = event.Details.Parameters[`flag_question_${index + 1}`];
             }
         }
