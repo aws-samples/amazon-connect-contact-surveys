@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Post-contact Surveys for Amazon Connect deployment"
+Description: "Post-contact Surveys for Amazon Connect deployment (SO9273)"
 
 Mappings:
   CFTParameters:
