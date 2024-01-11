@@ -219,6 +219,143 @@ Resources:
                 - ALLOW_REFRESH_TOKEN_AUTH
             UserPoolId: !Ref UserPool
 
+    CognitoCustomResource:
+        Type: Custom::CognitoCustomResource
+        Properties:
+            ServiceToken: !GetAtt CognitoCustomResourceLambdaFunction.Arn
+            UserPoolId: !Ref UserPool
+
+    CognitoCustomResourceLambdaFunction:
+        Type: AWS::Lambda::Function
+        Properties:
+            Handler: index.handler
+            Role: !GetAtt CognitoCustomResourceLambdaFunctionRole.Arn
+            Timeout: 15
+            Runtime: nodejs16.x
+            Code:
+                ZipFile: |
+                    const AWS = require("aws-sdk");
+                    const https = require("https");
+                    const url = require("url");
+                    const client = new AWS.CognitoIdentityServiceProvider();
+
+                    exports.handler = async (event, context) => {
+                        if (event.RequestType === "Delete") {
+                          await send(event, context, "SUCCESS");
+                          return;
+                        }
+                        
+                        const input = {
+                            UserPoolId: event.ResourceProperties.UserPoolId,
+                            Username: "admin",
+                            UserAttributes: [{
+                            Name: "email_verified",
+                            Value: "true"
+                            }]
+                        };
+
+                        try {
+                            await client.adminUpdateUserAttributes(input).promise();
+                        }
+                        catch (e) {
+                            console.log(e);
+                            await send(event, context, "FAILED");
+                        }
+
+                        const response = {
+                            statusCode: 200,
+                            body: JSON.stringify({}),
+                        };
+
+                        await send(event, context, "SUCCESS");
+
+                        return response;
+
+
+
+
+                        async function send(event, context, responseStatus, responseData, physicalResourceId, noEcho) {
+                            var responseBody = JSON.stringify({
+                            Status: responseStatus,
+                            Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
+                            PhysicalResourceId: physicalResourceId || context.logStreamName,
+                            StackId: event.StackId,
+                            RequestId: event.RequestId,
+                            LogicalResourceId: event.LogicalResourceId,
+                            NoEcho: noEcho || false,
+                            Data: responseData,
+                            });
+
+                            console.log("Response body:\n", responseBody);
+
+                            var parsedUrl = url.parse(event.ResponseURL);
+                            var options = {
+                            hostname: parsedUrl.hostname,
+                            port: 443,
+                            path: parsedUrl.path,
+                            method: "PUT",
+                            headers: {
+                                "content-type": "",
+                                "content-length": responseBody.length,
+                            },
+                            };
+
+                            const sendPromise = new Promise((_res, _rej) => {
+                            try {
+                                var request = https.request(options, function(response) {
+                                console.log("Status code: " + response.statusCode);
+                                console.log("Status message: " + response.statusMessage);
+                                context.done();
+                                _res();
+                                });
+
+                                request.on("error", function(error) {
+                                console.log("send(..) failed executing https.request(..): " + error);
+                                context.done();
+                                _rej();
+                                });
+
+                                request.write(responseBody);
+                                request.end();
+                            }
+                            catch (e) {
+                                console.log(e);
+                            }
+                            });
+
+                            return await sendPromise;
+                        }
+                    };
+
+    CognitoCustomResourceLambdaFunctionRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Statement:
+                    - Action:
+                          - sts:AssumeRole
+                      Effect: Allow
+                      Principal:
+                          Service:
+                              - lambda.amazonaws.com
+                Version: "2012-10-17"
+            Path: "/"
+            Policies:
+                - PolicyDocument:
+                      Statement:
+                          - Action:
+                                - logs:CreateLogGroup
+                                - logs:CreateLogStream
+                                - logs:PutLogEvents
+                            Effect: Allow
+                            Resource: arn:aws:logs:*:*:*
+                          - Action:
+                                - cognito-idp:AdminUpdateUserAttributes
+                            Effect: Allow
+                            Resource: !GetAtt UserPool.Arn
+                      Version: "2012-10-17"
+                  PolicyName: !Sub ${AWS::StackName}-CustomResourceCognito
+
     FrontEndS3BucketPolicy:
         Type: AWS::S3::BucketPolicy
         Properties:
@@ -340,7 +477,7 @@ Resources:
             CompatibleArchitectures:
                 - x86_64
             CompatibleRuntimes:
-                - nodejs14.x
+                - nodejs16.x
             Content:
                 S3Bucket: !Ref BlogArtifacts
                 S3Key: 'uuid-layer.zip'
@@ -353,7 +490,7 @@ Resources:
         Properties:
             Description: "Called by Amazon Connect contact flows to write results of a completed survey"
             Handler: index.handler
-            Runtime: nodejs14.x
+            Runtime: nodejs16.x
             Role: !GetAtt LambdaWriteSurveyResultsRole.Arn
             FunctionName: !Sub ${AWS::StackName}-surveys-write-results
             Timeout: 12
@@ -412,7 +549,7 @@ Resources:
         Properties:
             Description: "The backend for the API powering the Amazon Connect Post Call Surveys Manager"
             Handler: index.handler
-            Runtime: nodejs14.x
+            Runtime: nodejs16.x
             Role: !GetAtt LambdaSurveysApiRole.Arn
             FunctionName: !Sub ${AWS::StackName}-surveys-api
             Timeout: 12
@@ -658,7 +795,7 @@ Resources:
         Properties:
             Description: "Called by Amazon Connect contact flows to retrieve a survey configuration"
             Handler: index.handler
-            Runtime: nodejs14.x
+            Runtime: nodejs16.x
             Role: !GetAtt LambdaGetSurveyConfigRole.Arn
             FunctionName: !Sub ${AWS::StackName}-surveys-get-survey-config
             Timeout: 12
@@ -724,7 +861,7 @@ Resources:
         Properties:
             Description: "Called by Amazon Connect contact flows to determine if tasks should be sent to alert on survey results"
             Handler: index.handler
-            Runtime: nodejs14.x
+            Runtime: nodejs16.x
             Role: !GetAtt LambdaProcessSurveysFlagsRole.Arn
             FunctionName: !Sub ${AWS::StackName}-process-survey-flags
             Timeout: 12
@@ -759,7 +896,7 @@ Resources:
                             console.log(`Processing ${key}`);
                             if (event.Details.Parameters[`flag_question_${index + 1}`] && event.Details.Parameters[`flag_question_${index + 1}`] != '') {
                                 console.log(`Flag exists for ${key} with threshold ${event.Details.Parameters[`flag_question_${index + 1}`]}`);
-                                if (parseInt(event.Details.ContactData.Attributes[key]) < parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
+                                if (parseInt(event.Details.ContactData.Attributes[key]) <= parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
                                     flagged[key] = event.Details.Parameters[`flag_question_${index + 1}`];
                                 }
                             }
@@ -771,7 +908,7 @@ Resources:
                             let description = "";
                             
                             Object.keys(flagged).forEach(key => {
-                                description += `Question ${key.substr(key.length - 1)}: ${flagged[key]}\n`;
+                                description += `Question ${key.substr(key.length - 1)}: ${event['Details']['ContactData']['Attributes'][key]}\n`;
                             });
                             
                             var params = {
@@ -816,7 +953,7 @@ Resources:
         Properties:
             Description: "A set of utilities for the solution to work"
             Handler: index.handler
-            Runtime: nodejs14.x
+            Runtime: nodejs16.x
             Role: !GetAtt LambdaSurveysUtilsRole.Arn
             FunctionName: !Sub ${AWS::StackName}-utils
             Timeout: 12

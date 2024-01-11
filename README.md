@@ -101,11 +101,15 @@ Any contact that inputs a score lower than the defined threshold to that questio
 
 **Note:** the id of your survey will be different than the one on the screenshot.
 
-5. In you Amazon Connect instance, create a new Contact Flow and import the *Survey Example Disconnect* flow. Before publishing, make sure that the **Invoke module** block is pointing to the *Contact Survey* module available in your Amazon Connect instance.
+5. In you Amazon Connect instance, create a new Contact Flow and import the [*Survey Example Disconnect* flow](/examples/1-Survey%20Example%20Disconnect). Before publishing, make sure that the **Invoke module** block is pointing to the *Contact Survey* module available in your Amazon Connect instance.
+
+**Note:** the contact flow can be found in the "examples" folder
 
 ![Simple survey example disconnect flow](/img/simple-survey-example-disconnect-flow.png)
 
-6. Repeat step 5 to import the *Simple Survey with flag* flow. Don't publish it just yet, you will need to make some configuration adjustments.
+6. Repeat step 5 to import the [*Simple Survey Example* flow](/examples/2-Simple%20Survey%20Example). Don't publish it just yet, you will need to make some configuration adjustments.
+
+**Note:** the contact flow can be found in the "examples" folder
 
 7. Locate the *Set Disconnect Flow* block. Configure this block to set the disconnect flow to the *Survey Example Disconnect* flow imported at step 5.
 
@@ -115,7 +119,7 @@ Any contact that inputs a score lower than the defined threshold to that questio
 
 ![Simple survey example set contact attribute](/img/simple-survey-example-inbound-flow-2.png)
 
-**Note:** It is important to understand that what determines the survey that will be played to a contact is based on the value of the *surveyId* contact attribute. Here defining the survey to play for a contact in a static fashion. You could of course set this attribute dynamically based on, for example, choices made in an IVR, or other contact attributes.
+**Note:** It is important to understand that the survey that will be played to a contact is based on the value of the *surveyId* contact attribute. Here, we are defining the survey to play for a contact in a static fashion by explicitly setting it's value in the contact flow. You could of course set this attribute dynamically based on, for example, choices made in an IVR, the queue the contact was transferred to, Contact Lens categories matched for that contact, or any other contact attributes.
 
 9. Save and publish the flow.
 

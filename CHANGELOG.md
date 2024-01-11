@@ -15,3 +15,7 @@ Fix for issue with deployment when users try to deploy in an AWS account that ha
 
 ## [1.0.2] - Results filtering
 Fix for results not being filtered properly when choosing to filter by date.
+
+## [1.1] - Added support for CHAT, auto-verify admin user, and update to Node 16
+Added support for surveys to accomodate the CHAT channel. In addition, the "admin" user created when the solution is deployed will now have their email address automatically verified allowing for a more robust password management workflow.
+All runtimes for Lambda functions have also been updated to Node 16, with plans to update to Node 20 soon.
