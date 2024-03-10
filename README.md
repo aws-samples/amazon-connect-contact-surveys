@@ -12,7 +12,7 @@ The solution is composed of:
 - a Contact Flow Module that will dynamically play the right survey for to a contact
 
 Thanks to the flexible nature of this solution, surveys can be played in these scenario:
-- reactively, after a contact (inbound voice, outbound voice) with a customer
+- reactively, after a contact (inbound voice, outbound voice, chat) with a customer
 - proactively, in combination with the startOutboundContact API
 
 To find more information about how to implement these scenario, see [Example usage](#example-usage) 
@@ -42,6 +42,7 @@ To deploy this solution, you will need to have the following permissions in your
 - Create and manage Amazon Cognito resources
 - Create and manage AWS Lambda resources
 - Create and manage Amazon Connect resources
+- Create and manage Lex bots
 
 Typically, this solution should be deployed by a user with full access to your AWS environment.
 
