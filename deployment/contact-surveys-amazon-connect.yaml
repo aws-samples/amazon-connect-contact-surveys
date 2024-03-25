@@ -2,11 +2,11 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: "Post-contact Surveys for Amazon Connect deployment (SO9273)"
 
 Mappings:
-  CFTParameters:
-    S3Bucket:   
-      Name: aws-contact-center-blog
-    S3Prefix:
-      Value: amazon-connect-post-call-surveys
+    CFTParameters:
+        S3Bucket:
+            Name: aws-contact-center-blog
+        S3Prefix:
+            Value: amazon-connect-post-call-surveys
 
 Parameters:
     AmazonConnectInstanceARN:
@@ -23,163 +23,253 @@ Parameters:
         Description: "The email address for the initial user of the solution"
 
 Resources:
-  #####################################################
-  # Artifact S3 Bucket
-  #####################################################
+    #####################################################
+    # Artifact S3 Bucket
+    #####################################################
     BlogArtifacts:
-      Type: AWS::S3::Bucket
-      DeletionPolicy: Delete
-      UpdateReplacePolicy: Retain
-      Properties:
-        OwnershipControls:
-          Rules:
-            - ObjectOwnership: ObjectWriter
-        BucketEncryption: 
-          ServerSideEncryptionConfiguration: 
-            - ServerSideEncryptionByDefault:
-                SSEAlgorithm: AES256
-  #####################################################
-  # Artifact Lambda IAM Role
-  #####################################################
+        Type: AWS::S3::Bucket
+        DeletionPolicy: Delete
+        UpdateReplacePolicy: Retain
+        Properties:
+            OwnershipControls:
+                Rules:
+                    - ObjectOwnership: ObjectWriter
+            BucketEncryption:
+                ServerSideEncryptionConfiguration:
+                    - ServerSideEncryptionByDefault:
+                          SSEAlgorithm: AES256
+    #####################################################
+    # Artifact Lambda IAM Role
+    #####################################################
     CopyArtifactsLambdaIamRole:
-      Type: 'AWS::IAM::Role'
-      Properties:
-        AssumeRolePolicyDocument:
-          Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service:
-                  - lambda.amazonaws.com
-              Action:
-                - 'sts:AssumeRole'
-        Path: /
-        Policies:
-          - PolicyName: root
-            PolicyDocument:
-              Version: 2012-10-17
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - 's3:PutObject'
-                  Resource: !Sub 'arn:aws:s3:::${BlogArtifacts}/*'
-                - Effect: Allow
-                  Action:
-                    - 's3:GetObject'
-                    - 's3:GetObjectVersion'
-                  Resource:
-                  - !Sub 
-                      - arn:aws:s3:::${S3BucketName}/*
-                      - S3BucketName: !FindInMap [CFTParameters, "S3Bucket", "Name"]
-                - Effect: Allow
-                  Action:
-                    - 's3:ListBucket'
-                    - 's3:ListBucketVersions'
-                  Resource: 
-                    - !Sub 
-                        - arn:aws:s3:::${S3BucketName}/*
-                        - S3BucketName: !FindInMap [CFTParameters, "S3Bucket", "Name"]
-                    - !Sub 'arn:aws:s3:::${BlogArtifacts}/*'
-                - Effect: Allow
-                  Action:
-                    - 's3:DeleteObject'
-                  Resource: 
-                    - !Sub 'arn:aws:s3:::${BlogArtifacts}/*'
-        ManagedPolicyArns: 
-          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Type: "AWS::IAM::Role"
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - lambda.amazonaws.com
+                      Action:
+                          - "sts:AssumeRole"
+            Path: /
+            Policies:
+                - PolicyName: root
+                  PolicyDocument:
+                      Version: 2012-10-17
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - "s3:PutObject"
+                            Resource: !Sub "arn:aws:s3:::${BlogArtifacts}/*"
+                          - Effect: Allow
+                            Action:
+                                - "s3:GetObject"
+                                - "s3:GetObjectVersion"
+                            Resource:
+                                - !Sub
+                                  - arn:aws:s3:::${S3BucketName}/*
+                                  - S3BucketName: !FindInMap [CFTParameters, "S3Bucket", "Name"]
+                          - Effect: Allow
+                            Action:
+                                - "s3:ListBucket"
+                                - "s3:ListBucketVersions"
+                            Resource:
+                                - !Sub
+                                  - arn:aws:s3:::${S3BucketName}/*
+                                  - S3BucketName: !FindInMap [CFTParameters, "S3Bucket", "Name"]
+                                - !Sub "arn:aws:s3:::${BlogArtifacts}/*"
+                          - Effect: Allow
+                            Action:
+                                - "s3:DeleteObject"
+                            Resource:
+                                - !Sub "arn:aws:s3:::${BlogArtifacts}/*"
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
     #####################################################
     # Custom resource trigger to copy artifacts
     #####################################################
     CopyCfnStacksLambdaTrigger:
-      Type: 'Custom::CopyCfnResources'
-      Properties:
-        ServiceToken: !GetAtt CustomResourceCopySourceFunction.Arn
-        BlogArtifacts: !Ref BlogArtifacts
-        SourceBucket: !FindInMap [CFTParameters, "S3Bucket", "Name"]
-        SourcePrefix: !FindInMap [CFTParameters, "S3Prefix", "Value"]
-      DependsOn: CustomResourceCopySourceFunction
-    
+        Type: "Custom::CopyCfnResources"
+        Properties:
+            ServiceToken: !GetAtt CustomResourceCopySourceFunction.Arn
+            BlogArtifacts: !Ref BlogArtifacts
+            SourceBucket: !FindInMap [CFTParameters, "S3Bucket", "Name"]
+            SourcePrefix: !FindInMap [CFTParameters, "S3Prefix", "Value"]
+        DependsOn: CustomResourceCopySourceFunction
+
     #####################################################
     # Copy Layer Helper Function
     #####################################################
     CustomResourceCopySourceFunction:
-        Type: 'AWS::Lambda::Function'
+        Type: "AWS::Lambda::Function"
         Properties:
-          Role: !GetAtt CopyArtifactsLambdaIamRole.Arn
-          Handler: "index.handler"
-          Runtime: "nodejs16.x"
-          Code:
-            ZipFile: |
-              // Copyright 2022 Amazon.com and its affiliates; all rights reserved. This file is Amazon Web Services Content and may not be duplicated or distributed without permission.
-              const s3 = new (require('aws-sdk')).S3();
-              const response = require('cfn-response');
-              
-              const sourceObjectArray = [
-                'frontend/static/css/main.09784eec.css',
-                'frontend/static/css/main.09784eec.css.map',
-                'frontend/static/js/787.91799eaa.chunk.js',
-                'frontend/static/js/787.91799eaa.chunk.js.map',
-                'frontend/static/js/main.3336631e.js.LICENSE.txt',
-                'frontend/static/js/main.3336631e.js.map',
-                'frontend/static/js/main.3336631e.js',
-                'frontend/static/media/ico_connect.c4b4b06e46441b63ec178326f8a9e34e.svg',
-                'frontend/asset-manifest.json',
-                'frontend/config.js',
-                'frontend/favicon.ico',
-                'frontend/favicon.png',
-                'frontend/index.html',
-                'frontend/robots.txt',
-                'uuid-layer.zip'
-              ];
-              exports.handler = async (event, context) => {
-                  const sourceBucket = event.ResourceProperties.SourceBucket;
-                  const sourcePrefix = event.ResourceProperties.SourcePrefix;
-                  console.log(event);
-                  var result = {responseStatus: 'FAILED', responseData: {Data: 'Never updated'}};
-                  try {
-                      console.log(`Received event with type ${event.RequestType}`); 
-                      if(event.RequestType === 'Create' || event.RequestType === 'Update') {
-                          copyResult = await Promise.all(
-                              sourceObjectArray.map( async (object) => {
-                                  console.log('Copying with', object, `${sourceBucket}/${sourcePrefix}/${object}`)
-                                  s3Result = await s3.copyObject({
-                                      Bucket: event.ResourceProperties.BlogArtifacts,
-                                      Key: object,
-                                      CopySource: `${sourceBucket}/${sourcePrefix}/${object}`
-                                  }).promise();
-                                  console.log(`Finished uploading File with result ${JSON.stringify(s3Result, 0, 4)}`);
-                              }),
-                          );
-                          result.responseStatus = 'SUCCESS';
-                          result.responseData['Data'] = 'Successfully uploaded files';
-                      } else if (event.RequestType === 'Delete') {
-                          cleanupResult = await Promise.all(
-                              sourceObjectArray.map( async (object) => {
-                                  s3Result = await s3.deleteObjects({
-                                      Bucket: event.ResourceProperties.BlogArtifacts,
-                                      Delete: { Objects: [{Key: object }]}
-                                  }).promise();
-                                  console.log(`Finished deleting files with result ${JSON.stringify(s3Result, 0, 4)}`);
-                              }),
-                          );                        
-                          result.responseStatus = 'SUCCESS',
-                          result.responseData['Data'] = 'Successfully deleted files';
-                      }
-                  } catch (error) {
-                      console.log(JSON.stringify(error, 0, 4));
-                      result.responseStatus = 'FAILED';
-                      result.responseData['Data'] = 'Failed to process event';
-                  } finally {
-                      return await responsePromise(event, context, result.responseStatus, result.responseData, `mainstack`);
-                  }
-              };
-              function responsePromise(event, context, responseStatus, responseData, physicalResourceId) {
-                  return new Promise(() => response.send(event, context, responseStatus, responseData, physicalResourceId));
-              }
-          Timeout: 50
+            Role: !GetAtt CopyArtifactsLambdaIamRole.Arn
+            Handler: "index.handler"
+            Runtime: "nodejs16.x"
+            Code:
+                ZipFile: |
+                    // Copyright 2022 Amazon.com and its affiliates; all rights reserved. This file is Amazon Web Services Content and may not be duplicated or distributed without permission.
+                    const s3 = new (require('aws-sdk')).S3();
+                    const response = require('cfn-response');
 
+                    const sourceObjectArray = [
+                      'frontend/static/css/main.09784eec.css',
+                      'frontend/static/css/main.09784eec.css.map',
+                      'frontend/static/js/787.91799eaa.chunk.js',
+                      'frontend/static/js/787.91799eaa.chunk.js.map',
+                      'frontend/static/js/main.3336631e.js.LICENSE.txt',
+                      'frontend/static/js/main.3336631e.js.map',
+                      'frontend/static/js/main.3336631e.js',
+                      'frontend/static/media/ico_connect.c4b4b06e46441b63ec178326f8a9e34e.svg',
+                      'frontend/asset-manifest.json',
+                      'frontend/config.js',
+                      'frontend/favicon.ico',
+                      'frontend/favicon.png',
+                      'frontend/index.html',
+                      'frontend/robots.txt',
+                      'uuid-layer.zip'
+                    ];
+                    exports.handler = async (event, context) => {
+                        const sourceBucket = event.ResourceProperties.SourceBucket;
+                        const sourcePrefix = event.ResourceProperties.SourcePrefix;
+                        console.log(event);
+                        var result = {responseStatus: 'FAILED', responseData: {Data: 'Never updated'}};
+                        try {
+                            console.log(`Received event with type ${event.RequestType}`); 
+                            if(event.RequestType === 'Create' || event.RequestType === 'Update') {
+                                copyResult = await Promise.all(
+                                    sourceObjectArray.map( async (object) => {
+                                        console.log('Copying with', object, `${sourceBucket}/${sourcePrefix}/${object}`)
+                                        s3Result = await s3.copyObject({
+                                            Bucket: event.ResourceProperties.BlogArtifacts,
+                                            Key: object,
+                                            CopySource: `${sourceBucket}/${sourcePrefix}/${object}`
+                                        }).promise();
+                                        console.log(`Finished uploading File with result ${JSON.stringify(s3Result, 0, 4)}`);
+                                    }),
+                                );
+                                result.responseStatus = 'SUCCESS';
+                                result.responseData['Data'] = 'Successfully uploaded files';
+                            } else if (event.RequestType === 'Delete') {
+                                cleanupResult = await Promise.all(
+                                    sourceObjectArray.map( async (object) => {
+                                        s3Result = await s3.deleteObjects({
+                                            Bucket: event.ResourceProperties.BlogArtifacts,
+                                            Delete: { Objects: [{Key: object }]}
+                                        }).promise();
+                                        console.log(`Finished deleting files with result ${JSON.stringify(s3Result, 0, 4)}`);
+                                    }),
+                                );                        
+                                result.responseStatus = 'SUCCESS',
+                                result.responseData['Data'] = 'Successfully deleted files';
+                            }
+                        } catch (error) {
+                            console.log(JSON.stringify(error, 0, 4));
+                            result.responseStatus = 'FAILED';
+                            result.responseData['Data'] = 'Failed to process event';
+                        } finally {
+                            return await responsePromise(event, context, result.responseStatus, result.responseData, `mainstack`);
+                        }
+                    };
+                    function responsePromise(event, context, responseStatus, responseData, physicalResourceId) {
+                        return new Promise(() => response.send(event, context, responseStatus, responseData, physicalResourceId));
+                    }
+            Timeout: 50
 
+    GenericLexBotRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - lexv2.amazonaws.com
+                      Action:
+                          - "sts:AssumeRole"
+            Path: "/"
+            Policies:
+                - PolicyName: LexRuntimeRolePolicy
+                  PolicyDocument:
+                      Version: 2012-10-17
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - "polly:SynthesizeSpeech"
+                            Resource: "*"
 
+    GenericLexBot:
+        DependsOn: GenericLexBotRole
+        Type: AWS::Lex::Bot
+        Properties:
+            Name: !Sub ${AWS::StackName}-contact-survey-bot
+            RoleArn: !GetAtt GenericLexBotRole.Arn
+            DataPrivacy:
+                ChildDirected: false
+            IdleSessionTTLInSeconds: 300
+            AutoBuildBotLocales: false
+            BotLocales:
+                - LocaleId: "en_US"
+                  NluConfidenceThreshold: 1
+                  VoiceSettings:
+                      VoiceId: "Ivy"
+                  Intents:
+                      - Name: "0"
+                        SampleUtterances:
+                            - Utterance: "0"
+                      - Name: "1"
+                        SampleUtterances:
+                            - Utterance: "1"
+                      - Name: "2"
+                        SampleUtterances:
+                            - Utterance: "2"
+                      - Name: "3"
+                        SampleUtterances:
+                            - Utterance: "3"
+                      - Name: "4"
+                        SampleUtterances:
+                            - Utterance: "4"
+                      - Name: "5"
+                        SampleUtterances:
+                            - Utterance: "5"
+                      - Name: "6"
+                        SampleUtterances:
+                            - Utterance: "6"
+                      - Name: "7"
+                        SampleUtterances:
+                            - Utterance: "7"
+                      - Name: "8"
+                        SampleUtterances:
+                            - Utterance: "8"
+                      - Name: "9"
+                        SampleUtterances:
+                            - Utterance: "9"
+                      - Name: "FallbackIntent"
+                        Description: "Default intent when no other intent matches"
+                        ParentIntentSignature: "AMAZON.FallbackIntent"
+
+    GenericLexBotVersion:
+        Type: AWS::Lex::BotVersion
+        DependsOn: GenericLexBot
+        Properties:
+            BotId: !Ref GenericLexBot
+            BotVersionLocaleSpecification:
+                - LocaleId: en_US
+                  BotVersionLocaleDetails:
+                      SourceBotVersion: DRAFT
+
+    GenericLexBotAlias:
+        Type: AWS::Lex::BotAlias
+        DependsOn: GenericLexBotVersion
+        Properties:
+            BotId: !Ref GenericLexBot
+            BotAliasName: "template"
+            BotVersion: !GetAtt GenericLexBotVersion.BotVersion
+            SentimentAnalysisSettings:
+                DetectSentiment: false
 
     UserPool:
         Type: AWS::Cognito::UserPool
@@ -219,145 +309,6 @@ Resources:
                 - ALLOW_REFRESH_TOKEN_AUTH
             UserPoolId: !Ref UserPool
 
-    CognitoCustomResource:
-        Type: Custom::CognitoCustomResource
-        Properties:
-            ServiceToken: !GetAtt CognitoCustomResourceLambdaFunction.Arn
-            UserPoolId: !Ref UserPool
-
-    CognitoCustomResourceLambdaFunction:
-        Type: AWS::Lambda::Function
-        Properties:
-            Handler: index.handler
-            Role: !GetAtt CognitoCustomResourceLambdaFunctionRole.Arn
-            Timeout: 15
-            Runtime: nodejs16.x
-            Code:
-                ZipFile: |
-                    // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-                    // SPDX-License-Identifier: MIT-0
-                    const AWS = require("aws-sdk");
-                    const https = require("https");
-                    const url = require("url");
-                    const client = new AWS.CognitoIdentityServiceProvider();
-
-                    exports.handler = async (event, context) => {
-                        if (event.RequestType === "Delete") {
-                          await send(event, context, "SUCCESS");
-                          return;
-                        }
-                        
-                        const input = {
-                            UserPoolId: event.ResourceProperties.UserPoolId,
-                            Username: "admin",
-                            UserAttributes: [{
-                            Name: "email_verified",
-                            Value: "true"
-                            }]
-                        };
-
-                        try {
-                            await client.adminUpdateUserAttributes(input).promise();
-                        }
-                        catch (e) {
-                            console.log(e);
-                            await send(event, context, "FAILED");
-                        }
-
-                        const response = {
-                            statusCode: 200,
-                            body: JSON.stringify({}),
-                        };
-
-                        await send(event, context, "SUCCESS");
-
-                        return response;
-
-
-
-
-                        async function send(event, context, responseStatus, responseData, physicalResourceId, noEcho) {
-                            var responseBody = JSON.stringify({
-                            Status: responseStatus,
-                            Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
-                            PhysicalResourceId: physicalResourceId || context.logStreamName,
-                            StackId: event.StackId,
-                            RequestId: event.RequestId,
-                            LogicalResourceId: event.LogicalResourceId,
-                            NoEcho: noEcho || false,
-                            Data: responseData,
-                            });
-
-                            console.log("Response body:\n", responseBody);
-
-                            var parsedUrl = url.parse(event.ResponseURL);
-                            var options = {
-                            hostname: parsedUrl.hostname,
-                            port: 443,
-                            path: parsedUrl.path,
-                            method: "PUT",
-                            headers: {
-                                "content-type": "",
-                                "content-length": responseBody.length,
-                            },
-                            };
-
-                            const sendPromise = new Promise((_res, _rej) => {
-                            try {
-                                var request = https.request(options, function(response) {
-                                console.log("Status code: " + response.statusCode);
-                                console.log("Status message: " + response.statusMessage);
-                                context.done();
-                                _res();
-                                });
-
-                                request.on("error", function(error) {
-                                console.log("send(..) failed executing https.request(..): " + error);
-                                context.done();
-                                _rej();
-                                });
-
-                                request.write(responseBody);
-                                request.end();
-                            }
-                            catch (e) {
-                                console.log(e);
-                            }
-                            });
-
-                            return await sendPromise;
-                        }
-                    };
-
-    CognitoCustomResourceLambdaFunctionRole:
-        Type: AWS::IAM::Role
-        Properties:
-            AssumeRolePolicyDocument:
-                Statement:
-                    - Action:
-                          - sts:AssumeRole
-                      Effect: Allow
-                      Principal:
-                          Service:
-                              - lambda.amazonaws.com
-                Version: "2012-10-17"
-            Path: "/"
-            Policies:
-                - PolicyDocument:
-                      Statement:
-                          - Action:
-                                - logs:CreateLogGroup
-                                - logs:CreateLogStream
-                                - logs:PutLogEvents
-                            Effect: Allow
-                            Resource: arn:aws:logs:*:*:*
-                          - Action:
-                                - cognito-idp:AdminUpdateUserAttributes
-                            Effect: Allow
-                            Resource: !GetAtt UserPool.Arn
-                      Version: "2012-10-17"
-                  PolicyName: !Sub ${AWS::StackName}-CustomResourceCognito
-
     FrontEndS3BucketPolicy:
         Type: AWS::S3::BucketPolicy
         Properties:
@@ -376,9 +327,9 @@ Resources:
     FrontEndS3Bucket:
         Type: AWS::S3::Bucket
         Properties:
-          OwnershipControls:
-            Rules:
-              - ObjectOwnership: ObjectWriter
+            OwnershipControls:
+                Rules:
+                    - ObjectOwnership: ObjectWriter
 
     CDNOriginIdentity:
         Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
@@ -482,7 +433,7 @@ Resources:
                 - nodejs16.x
             Content:
                 S3Bucket: !Ref BlogArtifacts
-                S3Key: 'uuid-layer.zip'
+                S3Key: "uuid-layer.zip"
             LayerName: !Sub ${AWS::StackName}-uuid-layer
 
     LambdaWriteSurveysResults:
@@ -898,7 +849,7 @@ Resources:
                             console.log(`Processing ${key}`);
                             if (event.Details.Parameters[`flag_question_${index + 1}`] && event.Details.Parameters[`flag_question_${index + 1}`] != '') {
                                 console.log(`Flag exists for ${key} with threshold ${event.Details.Parameters[`flag_question_${index + 1}`]}`);
-                                if (parseInt(event.Details.ContactData.Attributes[key]) <= parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
+                                if (parseInt(event.Details.ContactData.Attributes[key]) < parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
                                     flagged[key] = event.Details.Parameters[`flag_question_${index + 1}`];
                                 }
                             }
@@ -910,7 +861,7 @@ Resources:
                             let description = "";
                             
                             Object.keys(flagged).forEach(key => {
-                                description += `Question ${key.substr(key.length - 1)}: ${event['Details']['ContactData']['Attributes'][key]}\n`;
+                                description += `Question ${key.substr(key.length - 1)}: ${flagged[key]}\n`;
                             });
                             
                             var params = {
@@ -946,7 +897,6 @@ Resources:
                         };
                         return response;
                     };
-
 
     LambdaSurveyUtils:
         Type: AWS::Lambda::Function
@@ -1019,7 +969,6 @@ Resources:
                         }
                     };
 
-
     CognitoAuthorizer:
         Type: AWS::ApiGateway::Authorizer
         Properties:
@@ -1045,11 +994,11 @@ Resources:
 
     ApiGatewayLoggingRoleSetup:
         Type: AWS::ApiGateway::Account
-        DependsOn: 
+        DependsOn:
             - SurveysApiGateway
             - ApiGatewayLoggingRole
-        Properties: 
-          CloudWatchRoleArn: !GetAtt ApiGatewayLoggingRole.Arn
+        Properties:
+            CloudWatchRoleArn: !GetAtt ApiGatewayLoggingRole.Arn
 
     SurveysApiGateway:
         Type: AWS::ApiGateway::RestApi
@@ -1298,7 +1247,10 @@ Resources:
                             Action:
                                 - connect:StartTaskContact
                             Resource:
-                                - !Join ["/", [!Ref AmazonConnectInstanceARN, "contact-flow", !Ref ContactFlowIdForTasks]]
+                                - !Join [
+                                      "/",
+                                      [!Ref AmazonConnectInstanceARN, "contact-flow", !Ref ContactFlowIdForTasks],
+                                  ]
 
     LambdaSurveysApiRole:
         Type: AWS::IAM::Role
@@ -1377,6 +1329,143 @@ Resources:
                             Resource:
                                 - !GetAtt SurveysResultsDDBTable.Arn
                                 - !Join ["/", [!GetAtt SurveysResultsDDBTable.Arn, "index/surveyId"]]
+
+    CognitoCustomResource:
+        Type: Custom::CognitoCustomResource
+        Properties:
+            ServiceToken: !GetAtt CognitoCustomResourceLambdaFunction.Arn
+            UserPoolId: !Ref UserPool
+
+    CognitoCustomResourceLambdaFunction:
+        Type: AWS::Lambda::Function
+        Properties:
+            Handler: index.handler
+            Role: !GetAtt CognitoCustomResourceLambdaFunctionRole.Arn
+            Timeout: 15
+            Runtime: nodejs16.x
+            Code:
+                ZipFile: |
+                    const AWS = require("aws-sdk");
+                    const https = require("https");
+                    const url = require("url");
+                    const client = new AWS.CognitoIdentityServiceProvider();
+
+                    exports.handler = async (event, context) => {
+                        if (event.RequestType === "Delete") {
+                          await send(event, context, "SUCCESS");
+                          return;
+                        }
+                        
+                        const input = {
+                            UserPoolId: event.ResourceProperties.UserPoolId,
+                            Username: "admin",
+                            UserAttributes: [{
+                            Name: "email_verified",
+                            Value: "true"
+                            }]
+                        };
+
+                        try {
+                            await client.adminUpdateUserAttributes(input).promise();
+                        }
+                        catch (e) {
+                            console.log(e);
+                            await send(event, context, "FAILED");
+                        }
+
+                        const response = {
+                            statusCode: 200,
+                            body: JSON.stringify({}),
+                        };
+
+                        await send(event, context, "SUCCESS");
+
+                        return response;
+
+
+
+
+                        async function send(event, context, responseStatus, responseData, physicalResourceId, noEcho) {
+                            var responseBody = JSON.stringify({
+                            Status: responseStatus,
+                            Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
+                            PhysicalResourceId: physicalResourceId || context.logStreamName,
+                            StackId: event.StackId,
+                            RequestId: event.RequestId,
+                            LogicalResourceId: event.LogicalResourceId,
+                            NoEcho: noEcho || false,
+                            Data: responseData,
+                            });
+
+                            console.log("Response body:\n", responseBody);
+
+                            var parsedUrl = url.parse(event.ResponseURL);
+                            var options = {
+                            hostname: parsedUrl.hostname,
+                            port: 443,
+                            path: parsedUrl.path,
+                            method: "PUT",
+                            headers: {
+                                "content-type": "",
+                                "content-length": responseBody.length,
+                            },
+                            };
+
+                            const sendPromise = new Promise((_res, _rej) => {
+                            try {
+                                var request = https.request(options, function(response) {
+                                console.log("Status code: " + response.statusCode);
+                                console.log("Status message: " + response.statusMessage);
+                                context.done();
+                                _res();
+                                });
+
+                                request.on("error", function(error) {
+                                console.log("send(..) failed executing https.request(..): " + error);
+                                context.done();
+                                _rej();
+                                });
+
+                                request.write(responseBody);
+                                request.end();
+                            }
+                            catch (e) {
+                                console.log(e);
+                            }
+                            });
+
+                            return await sendPromise;
+                        }
+                    };
+
+    CognitoCustomResourceLambdaFunctionRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Statement:
+                    - Action:
+                          - sts:AssumeRole
+                      Effect: Allow
+                      Principal:
+                          Service:
+                              - lambda.amazonaws.com
+                Version: "2012-10-17"
+            Path: "/"
+            Policies:
+                - PolicyDocument:
+                      Statement:
+                          - Action:
+                                - logs:CreateLogGroup
+                                - logs:CreateLogStream
+                                - logs:PutLogEvents
+                            Effect: Allow
+                            Resource: arn:aws:logs:*:*:*
+                          - Action:
+                                - cognito-idp:AdminUpdateUserAttributes
+                            Effect: Allow
+                            Resource: !GetAtt UserPool.Arn
+                      Version: "2012-10-17"
+                  PolicyName: !Sub ${AWS::StackName}-CustomResourceCognito
 
     S3CustomResource:
         Type: Custom::S3CustomResource
@@ -1572,11 +1661,11 @@ Resources:
                             Effect: Allow
                             Resource:
                                 - !Sub
-                                    - arn:aws:s3:::${S3BucketName}/*
-                                    - S3BucketName: !Ref BlogArtifacts
-                                - !Sub 
-                                    - arn:aws:s3:::${S3BucketName}
-                                    - S3BucketName: !Ref BlogArtifacts
+                                  - arn:aws:s3:::${S3BucketName}/*
+                                  - S3BucketName: !Ref BlogArtifacts
+                                - !Sub
+                                  - arn:aws:s3:::${S3BucketName}
+                                  - S3BucketName: !Ref BlogArtifacts
                                 - !Sub arn:aws:s3:::${FrontEndS3Bucket}/*
                                 - !Sub arn:aws:s3:::${FrontEndS3Bucket}
                       Version: "2012-10-17"
@@ -1671,41 +1760,41 @@ Resources:
         Type: AWS::Lambda::Permission
         DependsOn: LambdaGetSurveyConfig
         Properties:
-          FunctionName: !Ref LambdaGetSurveyConfig
-          Action: "lambda:InvokeFunction"
-          Principal:  "connect.amazonaws.com"
-          SourceAccount: !Sub ${AWS::AccountId}
-          SourceArn: !Ref AmazonConnectInstanceARN
+            FunctionName: !Ref LambdaGetSurveyConfig
+            Action: "lambda:InvokeFunction"
+            Principal: "connect.amazonaws.com"
+            SourceAccount: !Sub ${AWS::AccountId}
+            SourceArn: !Ref AmazonConnectInstanceARN
 
     ConnectFunctionPolicyLambdaWriteSurveysResults:
         Type: AWS::Lambda::Permission
         DependsOn: LambdaWriteSurveysResults
         Properties:
-          FunctionName: !Ref LambdaWriteSurveysResults
-          Action: "lambda:InvokeFunction"
-          Principal:  "connect.amazonaws.com"
-          SourceAccount: !Sub ${AWS::AccountId}
-          SourceArn: !Ref AmazonConnectInstanceARN
+            FunctionName: !Ref LambdaWriteSurveysResults
+            Action: "lambda:InvokeFunction"
+            Principal: "connect.amazonaws.com"
+            SourceAccount: !Sub ${AWS::AccountId}
+            SourceArn: !Ref AmazonConnectInstanceARN
 
     ConnectFunctionPolicyLambdaSurveyUtils:
         Type: AWS::Lambda::Permission
         DependsOn: LambdaSurveyUtils
         Properties:
-          FunctionName: !Ref LambdaSurveyUtils
-          Action: "lambda:InvokeFunction"
-          Principal:  "connect.amazonaws.com"
-          SourceAccount: !Sub ${AWS::AccountId}
-          SourceArn: !Ref AmazonConnectInstanceARN
+            FunctionName: !Ref LambdaSurveyUtils
+            Action: "lambda:InvokeFunction"
+            Principal: "connect.amazonaws.com"
+            SourceAccount: !Sub ${AWS::AccountId}
+            SourceArn: !Ref AmazonConnectInstanceARN
 
     ConnectFunctionPolicyLambdaProcessSurveyFlagsConfig:
         Type: AWS::Lambda::Permission
         DependsOn: LambdaProcessSurveyFlagsConfig
         Properties:
-          FunctionName: !Ref LambdaProcessSurveyFlagsConfig
-          Action: "lambda:InvokeFunction"
-          Principal:  "connect.amazonaws.com"
-          SourceAccount: !Sub ${AWS::AccountId}
-          SourceArn: !Ref AmazonConnectInstanceARN
+            FunctionName: !Ref LambdaProcessSurveyFlagsConfig
+            Action: "lambda:InvokeFunction"
+            Principal: "connect.amazonaws.com"
+            SourceAccount: !Sub ${AWS::AccountId}
+            SourceArn: !Ref AmazonConnectInstanceARN
 
     ContactFlowModule:
         Type: AWS::Connect::ContactFlowModule
@@ -1715,10 +1804,18 @@ Resources:
             - ConnectFunctionPolicyLambdaSurveyUtils
             - ConnectFunctionPolicyLambdaProcessSurveyFlagsConfig
         Properties:
-            Content: !Sub '{"Version":"2019-10-30","StartAction":"4aa37d68-34fd-4cbf-af84-dd86cd97d758","Metadata":{"entryPointPosition":{"x":14.4,"y":14.4},"ActionMetadata":{"eda22bf3-c3f9-459f-8374-d56f84620644":{"position":{"x":345.6,"y":757.6}},"54b8b0f4-53b1-493a-9b74-e4056d92400e":{"position":{"x":2129.6,"y":240.8}},"f669287d-527d-41b9-b6e3-ecdbc330755c":{"position":{"x":2352.8,"y":225.60000000000002},"parameters":{"Attributes":{"loopCounter":{"useDynamic":true}}},"dynamicParams":["loopCounter"]},"8c223e1b-d94a-4b9c-acb5-3f400b030105":{"position":{"x":2136.8,"y":512},"parameters":{"Attributes":{"survey_result_$.Attributes.loopCounter":{"useDynamic":true}}},"dynamicParams":["survey_result_$.Attributes.loopCounter"]},"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e":{"position":{"x":2653.6000000000004,"y":782.4000000000001}},"241f8a68-56ff-49a2-99ee-68625cd82310":{"position":{"x":2364.8,"y":502.40000000000003},"parameters":{"Attributes":{"loopCounter":{"useDynamic":true}}},"dynamicParams":["loopCounter"]},"3bb7ac4c-4ebf-4c6d-ab1f-fbdbdf8a0748":{"position":{"x":632,"y":284.8},"parameters":{"Text":{"useDynamic":true}},"useDynamic":true},"e15e93de-3bae-47a8-ae59-d38b239849ce":{"position":{"x":344,"y":516.8000000000001}},"ce7cd3b5-5eec-4d7f-802c-f1e8621baccd":{"position":{"x":304,"y":277.6},"parameters":{"Attributes":{"surveyId":{"useDynamic":true},"intro":{"useDynamic":true},"surveySize":{"useDynamic":true},"outro":{"useDynamic":true}}},"dynamicParams":["surveyId","intro","surveySize","outro"]},"f1ec1587-371d-4b88-aeb0-cf92c3b10a3e":{"position":{"x":62.400000000000006,"y":489.6}},"4aa37d68-34fd-4cbf-af84-dd86cd97d758":{"position":{"x":184.8,"y":49.6}},"768119b4-b9c1-4f0d-85b0-3bb77958e1d0":{"position":{"x":58.400000000000006,"y":280.8},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaGetSurveyConfig}"},"LambdaInvocationAttributes":{"surveyId":{"useDynamic":true}}},"dynamicMetadata":{"surveyId":true}},"224cfa54-c321-454b-8911-007386bd9fd3":{"position":{"x":1220,"y":280},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaSurveyUtils}"},"LambdaInvocationAttributes":{"max":{"useDynamic":true},"flag_question_3":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"min":{"useDynamic":true},"currentQuestionIndex":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"flag_question_1":{"useDynamic":true},"question_3":{"useDynamic":true},"question_4":{"useDynamic":true},"question_1":{"useDynamic":true},"question_2":{"useDynamic":true},"question_5":{"useDynamic":true}}},"dynamicMetadata":{"max":true,"flag_question_3":true,"flag_question_2":true,"flag_question_5":true,"min":true,"currentQuestionIndex":true,"flag_question_4":true,"flag_question_1":true,"question_3":true,"question_4":true,"question_1":true,"question_2":true,"operation":false,"question_5":true}},"63107da9-ea91-4c3c-b5df-d8303d240363":{"position":{"x":1905.6000000000001,"y":280},"conditionMetadata":[{"id":"17e2a1c2-0acb-4bce-a6cf-5fcfc37aa3e5","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"false"}]},"56177ee5-4215-4449-a3e3-589d6d7add11":{"position":{"x":1449.6000000000001,"y":278.40000000000003},"parameters":{"Text":{"useDynamic":true}},"useDynamic":true,"conditionMetadata":[],"countryCodePrefix":"+1"},"da0ecb02-b835-4471-af5e-525686b26248":{"position":{"x":1912,"y":624.8000000000001}},"3e442c84-4cf0-412b-ad2c-627b9fde7c39":{"position":{"x":1676.8000000000002,"y":277.6},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaSurveyUtils}"},"LambdaInvocationAttributes":{"max":{"useDynamic":true},"flag_question_3":{"useDynamic":true},"input":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"min":{"useDynamic":true},"currentQuestionIndex":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"newCounter":{"useDynamic":true},"flag_question_1":{"useDynamic":true},"question_3":{"useDynamic":true},"question_4":{"useDynamic":true},"question_1":{"useDynamic":true},"question_2":{"useDynamic":true},"question_5":{"useDynamic":true}}},"dynamicMetadata":{"max":true,"flag_question_3":true,"input":true,"flag_question_2":true,"flag_question_5":true,"min":true,"currentQuestionIndex":true,"flag_question_4":true,"newCounter":true,"flag_question_1":true,"question_3":true,"question_4":true,"question_1":true,"question_2":true,"operation":false,"question_5":true}},"aa827bc2-ef0e-491a-b4b6-01122dda599d":{"position":{"x":1004.8000000000001,"y":280.8},"parameters":{"LoopCount":{"useDynamic":true}},"useDynamic":true},"c96fee53-310f-4d1f-8e88-859e2fad8ab5":{"position":{"x":1237.6000000000001,"y":844}},"48c2e006-db9f-4dab-b5bf-e8e81785fc49":{"position":{"x":888.8000000000001,"y":656},"parameters":{"Text":{"useDynamic":true}},"useDynamic":true},"74423203-603a-48f4-b84d-6fdc17e03c1d":{"position":{"x":600,"y":540},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaProcessSurveyFlagsConfig}"},"LambdaInvocationAttributes":{"flag_question_3":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"flag_question_1":{"useDynamic":true}}},"dynamicMetadata":{"flag_question_3":true,"flag_question_2":true,"flag_question_5":true,"flag_question_4":true,"flag_question_1":true}},"3e6e1542-631c-4dd8-868e-15ae830f0255":{"position":{"x":600.8000000000001,"y":764},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaWriteSurveysResults}"}},"dynamicMetadata":{}}}},"Actions":[{"Parameters":{},"Identifier":"eda22bf3-c3f9-459f-8374-d56f84620644","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Text":"Invalid input."},"Identifier":"54b8b0f4-53b1-493a-9b74-e4056d92400e","Type":"MessageParticipant","Transitions":{"NextAction":"f669287d-527d-41b9-b6e3-ecdbc330755c"}},{"Parameters":{"Attributes":{"loopCounter":"$.External.currentQuestionIndex"}},"Identifier":"f669287d-527d-41b9-b6e3-ecdbc330755c","Type":"UpdateContactAttributes","Transitions":{"NextAction":"56177ee5-4215-4449-a3e3-589d6d7add11","Errors":[{"NextAction":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"survey_result_$.Attributes.loopCounter":"$.StoredCustomerInput"}},"Identifier":"8c223e1b-d94a-4b9c-acb5-3f400b030105","Type":"UpdateContactAttributes","Transitions":{"NextAction":"241f8a68-56ff-49a2-99ee-68625cd82310","Errors":[{"NextAction":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Attributes":{"loopCounter":"$.External.newCounter"}},"Identifier":"241f8a68-56ff-49a2-99ee-68625cd82310","Type":"UpdateContactAttributes","Transitions":{"NextAction":"aa827bc2-ef0e-491a-b4b6-01122dda599d","Errors":[{"NextAction":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"$.Attributes.intro"},"Identifier":"3bb7ac4c-4ebf-4c6d-ab1f-fbdbdf8a0748","Type":"MessageParticipant","Transitions":{"NextAction":"aa827bc2-ef0e-491a-b4b6-01122dda599d","Errors":[{"NextAction":"aa827bc2-ef0e-491a-b4b6-01122dda599d","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"Sorry there was an unexpected error. We apologies for the inconvenience."},"Identifier":"e15e93de-3bae-47a8-ae59-d38b239849ce","Type":"MessageParticipant","Transitions":{"NextAction":"eda22bf3-c3f9-459f-8374-d56f84620644","Errors":[{"NextAction":"eda22bf3-c3f9-459f-8374-d56f84620644","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"surveyId":"$.External.surveyId","intro":"$.External.introPrompt","surveySize":"$.External.surveySize","outro":"$.External.outroPrompt","loopCounter":"1"}},"Identifier":"ce7cd3b5-5eec-4d7f-802c-f1e8621baccd","Type":"UpdateContactAttributes","Transitions":{"NextAction":"3bb7ac4c-4ebf-4c6d-ab1f-fbdbdf8a0748","Errors":[{"NextAction":"e15e93de-3bae-47a8-ae59-d38b239849ce","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"Lambda getSurveyConfig error!"},"Identifier":"f1ec1587-371d-4b88-aeb0-cf92c3b10a3e","Type":"MessageParticipant","Transitions":{"NextAction":"eda22bf3-c3f9-459f-8374-d56f84620644"}},{"Parameters":{"FlowLoggingBehavior":"Enabled"},"Identifier":"4aa37d68-34fd-4cbf-af84-dd86cd97d758","Type":"UpdateFlowLoggingBehavior","Transitions":{"NextAction":"768119b4-b9c1-4f0d-85b0-3bb77958e1d0"}},{"Parameters":{"LambdaFunctionARN":"${LambdaGetSurveyConfig.Arn}","InvocationTimeLimitSeconds":"6","LambdaInvocationAttributes":{"surveyId":"$.Attributes.surveyId"}},"Identifier":"768119b4-b9c1-4f0d-85b0-3bb77958e1d0","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"ce7cd3b5-5eec-4d7f-802c-f1e8621baccd","Errors":[{"NextAction":"f1ec1587-371d-4b88-aeb0-cf92c3b10a3e","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaSurveyUtils.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"max":"$.External.max","flag_question_3":"$.External.flag_question_3","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","min":"$.External.min","currentQuestionIndex":"$.Attributes.loopCounter","flag_question_4":"$.External.flag_question_4","flag_question_1":"$.External.flag_question_1","question_3":"$.External.question_3","question_4":"$.External.question_4","question_1":"$.External.question_1","question_2":"$.External.question_2","operation":"getNextSurveyQuestion","question_5":"$.External.question_5"}},"Identifier":"224cfa54-c321-454b-8911-007386bd9fd3","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"56177ee5-4215-4449-a3e3-589d6d7add11","Errors":[{"NextAction":"da0ecb02-b835-4471-af5e-525686b26248","ErrorType":"NoMatchingError"}]}},{"Parameters":{"ComparisonValue":"$.External.validInput"},"Identifier":"63107da9-ea91-4c3c-b5df-d8303d240363","Type":"Compare","Transitions":{"NextAction":"8c223e1b-d94a-4b9c-acb5-3f400b030105","Conditions":[{"NextAction":"54b8b0f4-53b1-493a-9b74-e4056d92400e","Condition":{"Operator":"Equals","Operands":["false"]}}],"Errors":[{"NextAction":"8c223e1b-d94a-4b9c-acb5-3f400b030105","ErrorType":"NoMatchingCondition"}]}},{"Parameters":{"StoreInput":"True","InputTimeLimitSeconds":"5","Text":"$.External.nextQuestion","DTMFConfiguration":{"DisableCancelKey":"False"},"InputValidation":{"CustomValidation":{"MaximumLength":"1"}}},"Identifier":"56177ee5-4215-4449-a3e3-589d6d7add11","Type":"GetParticipantInput","Transitions":{"NextAction":"3e442c84-4cf0-412b-ad2c-627b9fde7c39","Errors":[{"NextAction":"da0ecb02-b835-4471-af5e-525686b26248","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"da0ecb02-b835-4471-af5e-525686b26248","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"LambdaFunctionARN":"${LambdaSurveyUtils.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"max":"$.External.max","flag_question_3":"$.External.flag_question_3","input":"$.StoredCustomerInput","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","min":"$.External.min","currentQuestionIndex":"$.External.currentQuestionIndex","flag_question_4":"$.External.flag_question_4","newCounter":"$.External.newCounter","flag_question_1":"$.External.flag_question_1","question_3":"$.External.question_3","question_4":"$.External.question_4","question_1":"$.External.question_1","question_2":"$.External.question_2","operation":"validateInput","question_5":"$.External.question_5"}},"Identifier":"3e442c84-4cf0-412b-ad2c-627b9fde7c39","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"63107da9-ea91-4c3c-b5df-d8303d240363","Errors":[{"NextAction":"da0ecb02-b835-4471-af5e-525686b26248","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LoopCount":"$.Attributes.surveySize"},"Identifier":"aa827bc2-ef0e-491a-b4b6-01122dda599d","Type":"Loop","Transitions":{"NextAction":"74423203-603a-48f4-b84d-6fdc17e03c1d","Conditions":[{"NextAction":"224cfa54-c321-454b-8911-007386bd9fd3","Condition":{"Operator":"Equals","Operands":["ContinueLooping"]}},{"NextAction":"74423203-603a-48f4-b84d-6fdc17e03c1d","Condition":{"Operator":"Equals","Operands":["DoneLooping"]}}]}},{"Parameters":{},"Identifier":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Text":"$.Attributes.outro"},"Identifier":"48c2e006-db9f-4dab-b5bf-e8e81785fc49","Type":"MessageParticipant","Transitions":{"NextAction":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","Errors":[{"NextAction":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaProcessSurveyFlagsConfig.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"flag_question_3":"$.External.flag_question_3","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","flag_question_4":"$.External.flag_question_4","flag_question_1":"$.External.flag_question_1"}},"Identifier":"74423203-603a-48f4-b84d-6fdc17e03c1d","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"3e6e1542-631c-4dd8-868e-15ae830f0255","Errors":[{"NextAction":"3e6e1542-631c-4dd8-868e-15ae830f0255","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaWriteSurveysResults.Arn}","InvocationTimeLimitSeconds":"5"},"Identifier":"3e6e1542-631c-4dd8-868e-15ae830f0255","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"48c2e006-db9f-4dab-b5bf-e8e81785fc49","Errors":[{"NextAction":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","ErrorType":"NoMatchingError"}]}}],"Settings":{"InputParameters":[],"OutputParameters":[],"Transitions":[]}}'
+            Content: !Sub '{"Version":"2019-10-30","StartAction":"4aa37d68-34fd-4cbf-af84-dd86cd97d758","Metadata":{"entryPointPosition":{"x":14.4,"y":14.4},"ActionMetadata":{"eda22bf3-c3f9-459f-8374-d56f84620644":{"position":{"x":345.6,"y":757.6}},"241f8a68-56ff-49a2-99ee-68625cd82310":{"position":{"x":2364.8,"y":502.4},"parameters":{"Attributes":{"loopCounter":{"useDynamic":true}}},"dynamicParams":["loopCounter"]},"3bb7ac4c-4ebf-4c6d-ab1f-fbdbdf8a0748":{"position":{"x":632,"y":284.8},"parameters":{"Text":{"useDynamic":true}},"useDynamic":true},"e15e93de-3bae-47a8-ae59-d38b239849ce":{"position":{"x":344,"y":516.8}},"ce7cd3b5-5eec-4d7f-802c-f1e8621baccd":{"position":{"x":304,"y":277.6},"parameters":{"Attributes":{"surveyId":{"useDynamic":true},"intro":{"useDynamic":true},"surveySize":{"useDynamic":true},"outro":{"useDynamic":true}}},"dynamicParams":["surveyId","intro","surveySize","outro"]},"f1ec1587-371d-4b88-aeb0-cf92c3b10a3e":{"position":{"x":62.4,"y":489.6}},"4aa37d68-34fd-4cbf-af84-dd86cd97d758":{"position":{"x":184.8,"y":49.6}},"768119b4-b9c1-4f0d-85b0-3bb77958e1d0":{"position":{"x":58.4,"y":280.8},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaGetSurveyConfig}"},"LambdaInvocationAttributes":{"surveyId":{"useDynamic":true}}},"dynamicMetadata":{"surveyId":true}},"74423203-603a-48f4-b84d-6fdc17e03c1d":{"position":{"x":600,"y":540},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaProcessSurveyFlagsConfig}"},"LambdaInvocationAttributes":{"flag_question_3":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"flag_question_1":{"useDynamic":true}}},"dynamicMetadata":{"flag_question_3":true,"flag_question_2":true,"flag_question_5":true,"flag_question_4":true,"flag_question_1":true}},"48c2e006-db9f-4dab-b5bf-e8e81785fc49":{"position":{"x":888.8,"y":656},"parameters":{"Text":{"useDynamic":true}},"useDynamic":true},"3e6e1542-631c-4dd8-868e-15ae830f0255":{"position":{"x":600.8,"y":764},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaWriteSurveysResults}"}},"dynamicMetadata":{}},"c96fee53-310f-4d1f-8e88-859e2fad8ab5":{"position":{"x":1237.6,"y":844}},"610c4bea-35bb-408e-b61d-f81edfc1ad85":{"position":{"x":1936.8,"y":754.4}},"aa827bc2-ef0e-491a-b4b6-01122dda599d":{"position":{"x":1004.8,"y":280.8},"parameters":{"LoopCount":{"useDynamic":true}},"useDynamic":true},"224cfa54-c321-454b-8911-007386bd9fd3":{"position":{"x":1220,"y":280},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaSurveyUtils}"},"LambdaInvocationAttributes":{"max":{"useDynamic":true},"flag_question_3":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"min":{"useDynamic":true},"currentQuestionIndex":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"flag_question_1":{"useDynamic":true},"question_3":{"useDynamic":true},"question_4":{"useDynamic":true},"question_1":{"useDynamic":true},"question_2":{"useDynamic":true},"question_5":{"useDynamic":true}}},"dynamicMetadata":{"max":true,"flag_question_3":true,"flag_question_2":true,"flag_question_5":true,"min":true,"currentQuestionIndex":true,"flag_question_4":true,"flag_question_1":true,"question_3":true,"question_4":true,"question_1":true,"question_2":true,"operation":false,"question_5":true}},"da0ecb02-b835-4471-af5e-525686b26248":{"position":{"x":1603.2,"y":419.2}},"56177ee5-4215-4449-a3e3-589d6d7add11":{"position":{"x":1450.4,"y":190.4},"parameters":{"Text":{"useDynamic":true}},"useDynamic":true,"conditionMetadata":[],"countryCodePrefix":"+1"},"8c223e1b-d94a-4b9c-acb5-3f400b030105":{"position":{"x":2136.8,"y":512},"parameters":{"Attributes":{"survey_result_$.Attributes.loopCounter":{"useDynamic":true}}},"dynamicParams":["survey_result_$.Attributes.loopCounter"]},"3e442c84-4cf0-412b-ad2c-627b9fde7c39":{"position":{"x":1672.8,"y":188},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaSurveyUtils}"},"LambdaInvocationAttributes":{"max":{"useDynamic":true},"flag_question_3":{"useDynamic":true},"input":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"min":{"useDynamic":true},"currentQuestionIndex":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"newCounter":{"useDynamic":true},"flag_question_1":{"useDynamic":true},"question_3":{"useDynamic":true},"question_4":{"useDynamic":true},"question_1":{"useDynamic":true},"question_2":{"useDynamic":true},"question_5":{"useDynamic":true}}},"dynamicMetadata":{"max":true,"flag_question_3":true,"input":true,"flag_question_2":true,"flag_question_5":true,"min":true,"currentQuestionIndex":true,"flag_question_4":true,"newCounter":true,"flag_question_1":true,"question_3":true,"question_4":true,"question_1":true,"question_2":true,"operation":false,"question_5":true}},"63107da9-ea91-4c3c-b5df-d8303d240363":{"position":{"x":1905.6,"y":188.8},"conditions":[],"conditionMetadata":[{"id":"b4593c13-dc5e-49a0-9257-a33be555ad7d","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"false"}]},"ac06cc31-1f55-48b8-8794-924cff3fa21a":{"position":{"x":1699.2,"y":1107.2}},"f16ab885-87eb-4564-a5f8-9e8fbe8189dd":{"position":{"x":1222.4,"y":553.6},"conditions":[],"conditionMetadata":[{"id":"ed71b790-3fa7-48b8-98d1-08c4aec9dcd9","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"CHAT"}]},"10aa78f0-92c7-425b-8024-3911647de510":{"position":{"x":1692,"y":553.6},"parameters":{"LambdaFunctionARN":{"displayName":"${LambdaSurveyUtils}"},"LambdaInvocationAttributes":{"max":{"useDynamic":true},"flag_question_3":{"useDynamic":true},"input":{"useDynamic":true},"flag_question_2":{"useDynamic":true},"flag_question_5":{"useDynamic":true},"min":{"useDynamic":true},"currentQuestionIndex":{"useDynamic":true},"flag_question_4":{"useDynamic":true},"newCounter":{"useDynamic":true},"flag_question_1":{"useDynamic":true},"question_3":{"useDynamic":true},"question_4":{"useDynamic":true},"question_1":{"useDynamic":true},"question_2":{"useDynamic":true},"question_5":{"useDynamic":true}}},"dynamicMetadata":{"max":true,"flag_question_3":true,"input":true,"flag_question_2":true,"flag_question_5":true,"min":true,"currentQuestionIndex":true,"flag_question_4":true,"newCounter":true,"flag_question_1":true,"question_3":true,"question_4":true,"question_1":true,"question_2":true,"operation":false,"question_5":true}},"b80d83ff-6c6c-4917-a496-1acfb564c556":{"position":{"x":1453.6,"y":553.6},"parameters":{"Text":{"useDynamic":true},"LexV2Bot":{"AliasArn":{"displayName":"template","useLexBotDropdown":true,"lexV2BotName":"${AWS::StackName}-contact-survey-bot"}}},"useLexBotDropdown":true,"lexV2BotName":"${AWS::StackName}-contact-survey-bot","lexV2BotAliasName":"template","useDynamic":true,"conditionMetadata":[{"id":"39efda44-319f-4e8d-8c9d-19745eec79e9","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"0"},{"id":"80534c58-179c-4ee3-972e-f255c209f9c4","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"1"},{"id":"cd70aa8e-9c8b-4f45-b25f-d4896b7e7997","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"2"},{"id":"1efe2907-82dc-42f9-86e4-bf3feba433ca","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"3"},{"id":"61f3b0c8-e6f6-4557-95c1-12c9699153bf","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"4"},{"id":"119bf0d5-3928-4c37-aa00-440dc3ed04f5","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"5"},{"id":"c9f4806b-1a62-4230-90f2-0f27263af2f2","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"6"},{"id":"a951117b-ef0c-48c3-9fa4-6618a697a380","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"7"},{"id":"b887ea5d-7bbb-4da2-b9cc-117f2ff01c47","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"8"},{"id":"570579f3-e48c-4744-abc6-b7c86eba24bc","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"9"}]},"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e":{"position":{"x":2653.6,"y":782.4}},"54b8b0f4-53b1-493a-9b74-e4056d92400e":{"position":{"x":2132.8,"y":147.2}},"f669287d-527d-41b9-b6e3-ecdbc330755c":{"position":{"x":2353.6,"y":148},"parameters":{"Attributes":{"loopCounter":{"useDynamic":true}}},"dynamicParams":["loopCounter"]}},"Annotations":[],"name":"Contact Survey","description":"","status":"published","hash":{}},"Actions":[{"Parameters":{},"Identifier":"eda22bf3-c3f9-459f-8374-d56f84620644","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Attributes":{"loopCounter":"$.External.newCounter"}},"Identifier":"241f8a68-56ff-49a2-99ee-68625cd82310","Type":"UpdateContactAttributes","Transitions":{"NextAction":"aa827bc2-ef0e-491a-b4b6-01122dda599d","Errors":[{"NextAction":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"$.Attributes.intro"},"Identifier":"3bb7ac4c-4ebf-4c6d-ab1f-fbdbdf8a0748","Type":"MessageParticipant","Transitions":{"NextAction":"aa827bc2-ef0e-491a-b4b6-01122dda599d","Errors":[{"NextAction":"aa827bc2-ef0e-491a-b4b6-01122dda599d","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"Sorry there was an unexpected error. We apologies for the inconvenience."},"Identifier":"e15e93de-3bae-47a8-ae59-d38b239849ce","Type":"MessageParticipant","Transitions":{"NextAction":"eda22bf3-c3f9-459f-8374-d56f84620644","Errors":[{"NextAction":"eda22bf3-c3f9-459f-8374-d56f84620644","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"surveyId":"$.External.surveyId","intro":"$.External.introPrompt","surveySize":"$.External.surveySize","outro":"$.External.outroPrompt","loopCounter":"1"}},"Identifier":"ce7cd3b5-5eec-4d7f-802c-f1e8621baccd","Type":"UpdateContactAttributes","Transitions":{"NextAction":"3bb7ac4c-4ebf-4c6d-ab1f-fbdbdf8a0748","Errors":[{"NextAction":"e15e93de-3bae-47a8-ae59-d38b239849ce","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"Lambda getSurveyConfig error!"},"Identifier":"f1ec1587-371d-4b88-aeb0-cf92c3b10a3e","Type":"MessageParticipant","Transitions":{"NextAction":"eda22bf3-c3f9-459f-8374-d56f84620644"}},{"Parameters":{"FlowLoggingBehavior":"Enabled"},"Identifier":"4aa37d68-34fd-4cbf-af84-dd86cd97d758","Type":"UpdateFlowLoggingBehavior","Transitions":{"NextAction":"768119b4-b9c1-4f0d-85b0-3bb77958e1d0"}},{"Parameters":{"LambdaFunctionARN":"${LambdaGetSurveyConfig.Arn}","InvocationTimeLimitSeconds":"6","LambdaInvocationAttributes":{"surveyId":"$.Attributes.surveyId"}},"Identifier":"768119b4-b9c1-4f0d-85b0-3bb77958e1d0","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"ce7cd3b5-5eec-4d7f-802c-f1e8621baccd","Errors":[{"NextAction":"f1ec1587-371d-4b88-aeb0-cf92c3b10a3e","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaProcessSurveyFlagsConfig.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"flag_question_3":"$.External.flag_question_3","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","flag_question_4":"$.External.flag_question_4","flag_question_1":"$.External.flag_question_1"}},"Identifier":"74423203-603a-48f4-b84d-6fdc17e03c1d","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"3e6e1542-631c-4dd8-868e-15ae830f0255","Errors":[{"NextAction":"3e6e1542-631c-4dd8-868e-15ae830f0255","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"$.Attributes.outro"},"Identifier":"48c2e006-db9f-4dab-b5bf-e8e81785fc49","Type":"MessageParticipant","Transitions":{"NextAction":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","Errors":[{"NextAction":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaWriteSurveysResults.Arn}","InvocationTimeLimitSeconds":"5"},"Identifier":"3e6e1542-631c-4dd8-868e-15ae830f0255","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"48c2e006-db9f-4dab-b5bf-e8e81785fc49","Errors":[{"NextAction":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"c96fee53-310f-4d1f-8e88-859e2fad8ab5","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{},"Identifier":"610c4bea-35bb-408e-b61d-f81edfc1ad85","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"LoopCount":"$.Attributes.surveySize"},"Identifier":"aa827bc2-ef0e-491a-b4b6-01122dda599d","Type":"Loop","Transitions":{"NextAction":"74423203-603a-48f4-b84d-6fdc17e03c1d","Conditions":[{"NextAction":"224cfa54-c321-454b-8911-007386bd9fd3","Condition":{"Operator":"Equals","Operands":["ContinueLooping"]}},{"NextAction":"74423203-603a-48f4-b84d-6fdc17e03c1d","Condition":{"Operator":"Equals","Operands":["DoneLooping"]}}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaSurveyUtils.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"max":"$.External.max","flag_question_3":"$.External.flag_question_3","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","min":"$.External.min","currentQuestionIndex":"$.Attributes.loopCounter","flag_question_4":"$.External.flag_question_4","flag_question_1":"$.External.flag_question_1","question_3":"$.External.question_3","question_4":"$.External.question_4","question_1":"$.External.question_1","question_2":"$.External.question_2","operation":"getNextSurveyQuestion","question_5":"$.External.question_5"}},"Identifier":"224cfa54-c321-454b-8911-007386bd9fd3","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"f16ab885-87eb-4564-a5f8-9e8fbe8189dd","Errors":[{"NextAction":"da0ecb02-b835-4471-af5e-525686b26248","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"da0ecb02-b835-4471-af5e-525686b26248","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"StoreInput":"True","InputTimeLimitSeconds":"5","Text":"$.External.nextQuestion","DTMFConfiguration":{"DisableCancelKey":"False"},"InputValidation":{"CustomValidation":{"MaximumLength":"1"}}},"Identifier":"56177ee5-4215-4449-a3e3-589d6d7add11","Type":"GetParticipantInput","Transitions":{"NextAction":"3e442c84-4cf0-412b-ad2c-627b9fde7c39","Errors":[{"NextAction":"da0ecb02-b835-4471-af5e-525686b26248","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"survey_result_$.Attributes.loopCounter":"$.StoredCustomerInput"}},"Identifier":"8c223e1b-d94a-4b9c-acb5-3f400b030105","Type":"UpdateContactAttributes","Transitions":{"NextAction":"241f8a68-56ff-49a2-99ee-68625cd82310","Errors":[{"NextAction":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaSurveyUtils.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"max":"$.External.max","flag_question_3":"$.External.flag_question_3","input":"$.StoredCustomerInput","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","min":"$.External.min","currentQuestionIndex":"$.External.currentQuestionIndex","flag_question_4":"$.External.flag_question_4","newCounter":"$.External.newCounter","flag_question_1":"$.External.flag_question_1","question_3":"$.External.question_3","question_4":"$.External.question_4","question_1":"$.External.question_1","question_2":"$.External.question_2","operation":"validateInput","question_5":"$.External.question_5"}},"Identifier":"3e442c84-4cf0-412b-ad2c-627b9fde7c39","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"63107da9-ea91-4c3c-b5df-d8303d240363","Errors":[{"NextAction":"da0ecb02-b835-4471-af5e-525686b26248","ErrorType":"NoMatchingError"}]}},{"Parameters":{"ComparisonValue":"$.External.validInput"},"Identifier":"63107da9-ea91-4c3c-b5df-d8303d240363","Type":"Compare","Transitions":{"NextAction":"8c223e1b-d94a-4b9c-acb5-3f400b030105","Conditions":[{"NextAction":"54b8b0f4-53b1-493a-9b74-e4056d92400e","Condition":{"Operator":"Equals","Operands":["false"]}}],"Errors":[{"NextAction":"8c223e1b-d94a-4b9c-acb5-3f400b030105","ErrorType":"NoMatchingCondition"}]}},{"Parameters":{},"Identifier":"ac06cc31-1f55-48b8-8794-924cff3fa21a","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"ComparisonValue":"$.Channel"},"Identifier":"f16ab885-87eb-4564-a5f8-9e8fbe8189dd","Type":"Compare","Transitions":{"NextAction":"56177ee5-4215-4449-a3e3-589d6d7add11","Conditions":[{"NextAction":"b80d83ff-6c6c-4917-a496-1acfb564c556","Condition":{"Operator":"Equals","Operands":["CHAT"]}}],"Errors":[{"NextAction":"56177ee5-4215-4449-a3e3-589d6d7add11","ErrorType":"NoMatchingCondition"}]}},{"Parameters":{"LambdaFunctionARN":"${LambdaSurveyUtils.Arn}","InvocationTimeLimitSeconds":"5","LambdaInvocationAttributes":{"max":"$.External.max","flag_question_3":"$.External.flag_question_3","input":"$.Lex.IntentName","flag_question_2":"$.External.flag_question_2","flag_question_5":"$.External.flag_question_5","min":"$.External.min","currentQuestionIndex":"$.External.currentQuestionIndex","flag_question_4":"$.External.flag_question_4","newCounter":"$.External.newCounter","flag_question_1":"$.External.flag_question_1","question_3":"$.External.question_3","question_4":"$.External.question_4","question_1":"$.External.question_1","question_2":"$.External.question_2","operation":"validateInput","question_5":"$.External.question_5"},"ResponseValidation":{"ResponseType":"STRING_MAP"}},"Identifier":"10aa78f0-92c7-425b-8024-3911647de510","Type":"InvokeLambdaFunction","Transitions":{"NextAction":"63107da9-ea91-4c3c-b5df-d8303d240363","Errors":[{"NextAction":"610c4bea-35bb-408e-b61d-f81edfc1ad85","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"$.External.nextQuestion","LexV2Bot":{"AliasArn":"${GenericLexBotAlias.Arn}"}},"Identifier":"b80d83ff-6c6c-4917-a496-1acfb564c556","Type":"ConnectParticipantWithLexBot","Transitions":{"NextAction":"ac06cc31-1f55-48b8-8794-924cff3fa21a","Conditions":[{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["0"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["1"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["2"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["3"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["4"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["5"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["6"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["7"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["8"]}},{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","Condition":{"Operator":"Equals","Operands":["9"]}}],"Errors":[{"NextAction":"10aa78f0-92c7-425b-8024-3911647de510","ErrorType":"NoMatchingCondition"},{"NextAction":"ac06cc31-1f55-48b8-8794-924cff3fa21a","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Text":"Invalid input."},"Identifier":"54b8b0f4-53b1-493a-9b74-e4056d92400e","Type":"MessageParticipant","Transitions":{"NextAction":"f669287d-527d-41b9-b6e3-ecdbc330755c"}},{"Parameters":{"Attributes":{"loopCounter":"$.External.currentQuestionIndex"}},"Identifier":"f669287d-527d-41b9-b6e3-ecdbc330755c","Type":"UpdateContactAttributes","Transitions":{"NextAction":"f16ab885-87eb-4564-a5f8-9e8fbe8189dd","Errors":[{"NextAction":"178a925b-dc1c-4d84-ab5f-84f50b5e8a2e","ErrorType":"NoMatchingError"}]}}],"Settings":{"InputParameters":[],"OutputParameters":[],"Transitions":[{"DisplayName":"Success","ReferenceName":"Success","Description":""},{"DisplayName":"Error","ReferenceName":"Error","Description":""}]}}'
             InstanceArn: !Ref AmazonConnectInstanceARN
             Name: "Contact Survey"
             State: ACTIVE
+
+    LexIntegrationAssociation:
+        Type: AWS::Connect::IntegrationAssociation
+        DependsOn: GenericLexBotAlias
+        Properties:
+            InstanceId: !Ref AmazonConnectInstanceARN
+            IntegrationType: LEX_BOT
+            IntegrationArn: !GetAtt GenericLexBotAlias.Arn
 
 Outputs:
     WebClient:
