@@ -1,46 +1,67 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-const AWS = require('aws-sdk');
-const ddb = new AWS.DynamoDB();
+// Import AWS SDK v3 DynamoDB clients
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
+// Initialize the DynamoDB client
+const client = new DynamoDBClient({});
+// Create a document client with marshalling enabled
+const docClient = DynamoDBDocumentClient.from(client);
+
+/**
+ * Lambda handler to retrieve survey configuration from DynamoDB
+ * Used by Amazon Connect to fetch survey details during contact flows
+ * 
+ * @param {Object} event - Lambda event containing survey parameters
+ * @returns {Object} Survey configuration including questions and metadata
+ */
 exports.handler = async (event) => {
-
+    // Initialize response object
     const response = {};
 
-    var params = {
+    // Prepare DynamoDB query parameters
+    const params = {
         TableName: process.env.TABLE,
         Key: {
-            'surveyId': { S: event.Details.Parameters.surveyId }
+            'surveyId': event.Details.Parameters.surveyId
         }
     };
     
     try {
-        let res = await ddb.getItem(params).promise();
+        // Fetch survey configuration from DynamoDB
+        const command = new GetCommand(params);
+        const result = await docClient.send(command);
+        
         response.statusCode = 200;
         
-        if (res.Item) {
+        if (result.Item) {
             response.message = 'OK';
             
-            let size = 0;
-            Object.keys(res.Item).forEach(k => {
-                if (res.Item[k].S) {
-                    response[k] = res.Item[k].S;
-                }
+            // Count the number of questions in the survey
+            let questionCount = 0;
+            
+            // Process each field in the DynamoDB item
+            Object.keys(result.Item).forEach(key => {
+                // Copy the item value to the response
+                response[key] = result.Item[key];
                 
-                if (res.Item[k].N) {
-                    response[k] = res.Item[k].N;
+                // Count fields that start with 'question' to determine survey size
+                if (key.startsWith('question')) {
+                    questionCount++;
                 }
-                
-                size = k.startsWith('question') ? size + 1 : size;
             });
             
-            response.surveySize = size;
+            // Add the total number of questions to the response
+            response.surveySize = questionCount;
         } else {
+            // If no survey found, return appropriate message
             response.message = `Couldn't find configuration for survey with id [${event.Details.Parameters.surveyId}]`;
         }
         
     } catch (err) {
+        // Log any errors that occur during execution
         console.log(err);
     }
     
