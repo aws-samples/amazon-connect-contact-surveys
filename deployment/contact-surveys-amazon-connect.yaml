@@ -20,7 +20,7 @@ Parameters:
         Description: The contact flow you want generated tasks to be directed to
     AdminEmailAddress:
         Type: String
-        Description: "The email address for the initial user of the solution"
+        Description: "The email address for the initial survey administrator of the solution"
 
 Resources:
     #####################################################
@@ -107,75 +107,116 @@ Resources:
         Properties:
             Role: !GetAtt CopyArtifactsLambdaIamRole.Arn
             Handler: "index.handler"
-            Runtime: "nodejs16.x"
+            Runtime: "nodejs22.x"
             Code:
                 ZipFile: |
-                    // Copyright 2022 Amazon.com and its affiliates; all rights reserved. This file is Amazon Web Services Content and may not be duplicated or distributed without permission.
-                    const s3 = new (require('aws-sdk')).S3();
+                    // Copyright 2022 Amazon.com and its affiliates; all rights reserved. 
+                    // This file is Amazon Web Services Content and may not be duplicated or distributed without permission.
+
+                    const { S3Client, CopyObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
                     const response = require('cfn-response');
 
+                    // Initialize S3 client
+                    const s3Client = new S3Client();
+
+                    // Array of source objects to be copied or deleted
                     const sourceObjectArray = [
-                      'frontend/static/css/main.09784eec.css',
-                      'frontend/static/css/main.09784eec.css.map',
-                      'frontend/static/js/787.91799eaa.chunk.js',
-                      'frontend/static/js/787.91799eaa.chunk.js.map',
-                      'frontend/static/js/main.3336631e.js.LICENSE.txt',
-                      'frontend/static/js/main.3336631e.js.map',
-                      'frontend/static/js/main.3336631e.js',
-                      'frontend/static/media/ico_connect.c4b4b06e46441b63ec178326f8a9e34e.svg',
-                      'frontend/asset-manifest.json',
-                      'frontend/config.js',
-                      'frontend/favicon.ico',
-                      'frontend/favicon.png',
-                      'frontend/index.html',
-                      'frontend/robots.txt',
-                      'uuid-layer.zip'
+                        'frontend/static/css/main.09784eec.css',
+                        'frontend/static/css/main.09784eec.css.map',
+                        'frontend/static/js/787.91799eaa.chunk.js',
+                        'frontend/static/js/787.91799eaa.chunk.js.map',
+                        'frontend/static/js/main.3336631e.js.LICENSE.txt',
+                        'frontend/static/js/main.3336631e.js.map',
+                        'frontend/static/js/main.3336631e.js',
+                        'frontend/static/media/ico_connect.c4b4b06e46441b63ec178326f8a9e34e.svg',
+                        'frontend/asset-manifest.json',
+                        'frontend/config.js',
+                        'frontend/favicon.ico',
+                        'frontend/favicon.png',
+                        'frontend/index.html',
+                        'frontend/robots.txt',
+                        'uuid-layer.zip'
                     ];
+
                     exports.handler = async (event, context) => {
+                        // Extract properties from the event
                         const sourceBucket = event.ResourceProperties.SourceBucket;
                         const sourcePrefix = event.ResourceProperties.SourcePrefix;
-                        console.log(event);
-                        var result = {responseStatus: 'FAILED', responseData: {Data: 'Never updated'}};
+                        console.log('Event:', event);
+
+                        // Initialize result object
+                        const result = {
+                            responseStatus: 'FAILED',
+                            responseData: { Data: 'Never updated' }
+                        };
+
                         try {
-                            console.log(`Received event with type ${event.RequestType}`); 
-                            if(event.RequestType === 'Create' || event.RequestType === 'Update') {
-                                copyResult = await Promise.all(
-                                    sourceObjectArray.map( async (object) => {
-                                        console.log('Copying with', object, `${sourceBucket}/${sourcePrefix}/${object}`)
-                                        s3Result = await s3.copyObject({
+                            console.log(`Received event with type ${event.RequestType}`);
+
+                            if (event.RequestType === 'Create' || event.RequestType === 'Update') {
+                                // Handle Create or Update operations
+                                await Promise.all(
+                                    sourceObjectArray.map(async (object) => {
+                                        console.log('Copying:', object, `${sourceBucket}/${sourcePrefix}/${object}`);
+                                        
+                                        const copyCommand = new CopyObjectCommand({
                                             Bucket: event.ResourceProperties.BlogArtifacts,
                                             Key: object,
                                             CopySource: `${sourceBucket}/${sourcePrefix}/${object}`
-                                        }).promise();
-                                        console.log(`Finished uploading File with result ${JSON.stringify(s3Result, 0, 4)}`);
-                                    }),
+                                        });
+
+                                        const s3Result = await s3Client.send(copyCommand);
+                                        console.log('Finished uploading File with result:', JSON.stringify(s3Result, null, 4));
+                                    })
                                 );
+
                                 result.responseStatus = 'SUCCESS';
-                                result.responseData['Data'] = 'Successfully uploaded files';
+                                result.responseData.Data = 'Successfully uploaded files';
+
                             } else if (event.RequestType === 'Delete') {
-                                cleanupResult = await Promise.all(
-                                    sourceObjectArray.map( async (object) => {
-                                        s3Result = await s3.deleteObjects({
+                                // Handle Delete operations
+                                await Promise.all(
+                                    sourceObjectArray.map(async (object) => {
+                                        const deleteCommand = new DeleteObjectsCommand({
                                             Bucket: event.ResourceProperties.BlogArtifacts,
-                                            Delete: { Objects: [{Key: object }]}
-                                        }).promise();
-                                        console.log(`Finished deleting files with result ${JSON.stringify(s3Result, 0, 4)}`);
-                                    }),
-                                );                        
-                                result.responseStatus = 'SUCCESS',
-                                result.responseData['Data'] = 'Successfully deleted files';
+                                            Delete: { 
+                                                Objects: [{ Key: object }]
+                                            }
+                                        });
+
+                                        const s3Result = await s3Client.send(deleteCommand);
+                                        console.log('Finished deleting files with result:', JSON.stringify(s3Result, null, 4));
+                                    })
+                                );
+
+                                result.responseStatus = 'SUCCESS';
+                                result.responseData.Data = 'Successfully deleted files';
                             }
+
                         } catch (error) {
-                            console.log(JSON.stringify(error, 0, 4));
+                            console.log('Error:', JSON.stringify(error, null, 4));
                             result.responseStatus = 'FAILED';
-                            result.responseData['Data'] = 'Failed to process event';
+                            result.responseData.Data = 'Failed to process event';
                         } finally {
-                            return await responsePromise(event, context, result.responseStatus, result.responseData, `mainstack`);
+                            return await sendResponse(event, context, result.responseStatus, result.responseData, 'mainstack');
                         }
                     };
-                    function responsePromise(event, context, responseStatus, responseData, physicalResourceId) {
-                        return new Promise(() => response.send(event, context, responseStatus, responseData, physicalResourceId));
+
+                    /**
+                    * Wraps the response.send in a Promise for better async handling
+                    * @param {Object} event - CloudFormation custom resource event
+                    * @param {Object} context - Lambda context
+                    * @param {string} responseStatus - SUCCESS or FAILED
+                    * @param {Object} responseData - Response data to send back
+                    * @param {string} physicalResourceId - Physical resource ID
+                    * @returns {Promise} Promise that resolves when response is sent
+                    */
+                    function sendResponse(event, context, responseStatus, responseData, physicalResourceId) {
+                        return new Promise(() => 
+                            response.send(event, context, responseStatus, responseData, physicalResourceId)
+                        );
                     }
+
             Timeout: 50
 
     GenericLexBotRole:
@@ -430,7 +471,7 @@ Resources:
             CompatibleArchitectures:
                 - x86_64
             CompatibleRuntimes:
-                - nodejs16.x
+                - nodejs22.x
             Content:
                 S3Bucket: !Ref BlogArtifacts
                 S3Key: "uuid-layer.zip"
@@ -443,7 +484,7 @@ Resources:
         Properties:
             Description: "Called by Amazon Connect contact flows to write results of a completed survey"
             Handler: index.handler
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Role: !GetAtt LambdaWriteSurveyResultsRole.Arn
             FunctionName: !Sub ${AWS::StackName}-surveys-write-results
             Timeout: 12
@@ -454,43 +495,67 @@ Resources:
                     // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
                     // SPDX-License-Identifier: MIT-0
 
-                    const AWS = require('aws-sdk');
-                    const ddb = new AWS.DynamoDB();
+                    // Import AWS SDK v3 DynamoDB clients
+                    const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+                    const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
 
+                    // Initialize DynamoDB clients
+                    const client = new DynamoDBClient({});
+                    // Create document client with default marshalling options
+                    const docClient = DynamoDBDocumentClient.from(client);
+
+                    /**
+                    * Lambda handler to store survey results in DynamoDB
+                    * Processes survey responses from Amazon Connect contact flow
+                    * 
+                    * @param {Object} event - Event containing survey responses and contact details
+                    * @returns {Object} Response indicating success/failure of the operation
+                    */
                     exports.handler = async (event) => {
+                        // Initialize object to store survey results
+                        const surveyResults = {};
+                        // Get all attributes from the contact data
+                        const data = event.Details.ContactData.Attributes;
                         
-                        var surveyResults = {};
-                        var data = event.Details.ContactData.Attributes;
-                        
+                        // Extract survey-related attributes from contact data
+                        // Only process attributes that start with "survey_result_"
                         Object.keys(data).forEach(element => {
-                          if (element.startsWith("survey_result_")) {
-                              surveyResults[element] = { S: data[element] };
-                          }
+                            if (element.startsWith("survey_result_")) {
+                                surveyResults[element] = data[element];
+                            }
                         });
                         
-                        var params = {
+                        // Prepare DynamoDB item for storage
+                        const params = {
                             TableName: process.env.TABLE,
                             Item: {
-                                contactId: { S: event.Details.ContactData.ContactId},
-                                surveyId: { S: event.Details.ContactData.Attributes.surveyId },
+                                // Store contact ID as primary key
+                                contactId: event.Details.ContactData.ContactId,
+                                // Store survey ID for reference
+                                surveyId: event.Details.ContactData.Attributes.surveyId,
+                                // Spread survey results into the item
                                 ...surveyResults,
-                                timestamp: { N: (Date.now() / 1000).toString() }
+                                // Add Unix timestamp for when the results were stored
+                                timestamp: Math.floor(Date.now() / 1000)
                             }
-                        }
+                        };
                         
                         try {
-                            await ddb.putItem(params).promise();
+                            // Write survey results to DynamoDB
+                            const command = new PutCommand(params);
+                            await docClient.send(command);
                         } catch (err) {
+                            // Log any errors that occur during write operation
                             console.log(err);
                         }
 
+                        // Return success response
                         const response = {
                             statusCode: 200,
                             body: JSON.stringify('OK'),
                         };
                         return response;
                     };
-
             Environment:
                 Variables:
                     TABLE: !Ref SurveysResultsDDBTable
@@ -502,7 +567,7 @@ Resources:
         Properties:
             Description: "The backend for the API powering the Amazon Connect Post Call Surveys Manager"
             Handler: index.handler
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Role: !GetAtt LambdaSurveysApiRole.Arn
             FunctionName: !Sub ${AWS::StackName}-surveys-api
             Timeout: 12
@@ -513,34 +578,59 @@ Resources:
                     // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
                     // SPDX-License-Identifier: MIT-0
 
-                    const AWS = require('aws-sdk');
-                    const docClient = new AWS.DynamoDB.DocumentClient();
-                    const ddb = new AWS.DynamoDB();
-
+                    // Import AWS SDK v3 DynamoDB clients
+                    // DynamoDBClient is the low-level client
+                    const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+                    // DynamoDBDocumentClient provides a higher-level abstraction for working with data
+                    const { 
+                        DynamoDBDocumentClient, 
+                        ScanCommand, 
+                        PutCommand, 
+                        DeleteCommand 
+                    } = require('@aws-sdk/lib-dynamodb');
+                    // UUID v4 for generating unique identifiers
                     const { v4: uuid } = require('uuid');
+
+                    // Initialize DynamoDB clients
+                    const client = new DynamoDBClient({});
+                    // Create document client with default marshalling options
+                    const docClient = DynamoDBDocumentClient.from(client);
+
+                    // Define valid operations for the API
                     const OPERATIONS = ['create', 'update', 'list', 'delete', 'results'];
 
-
+                    /**
+                    * Scans an entire DynamoDB table and returns all items
+                    * Handles pagination automatically using LastEvaluatedKey
+                    * @param {string} tableName - The name of the DynamoDB table to scan
+                    * @returns {Array} Array of items from the table
+                    */
                     const scanTable = async (tableName) => {
                         const params = {
                             TableName: tableName,
                         };
 
                         const scanResults = [];
-                        var lastEvaluatuedKey;
+                        let lastEvaluatedKey;
+                        
                         do {
-                            const items = await docClient.scan(params).promise();
-                            lastEvaluatuedKey = items.LastEvaluatedKey
-                            items.Items.forEach((item) => scanResults.push(item));
-                            params.ExclusiveStartKey = items.LastEvaluatedKey;
-                        } while (typeof lastEvaluatuedKey !== "undefined");
+                            const command = new ScanCommand(params);
+                            const response = await docClient.send(command);
+                            lastEvaluatedKey = response.LastEvaluatedKey;
+                            scanResults.push(...(response.Items || []));
+                            params.ExclusiveStartKey = lastEvaluatedKey;
+                        } while (lastEvaluatedKey);
 
                         return scanResults;
-
                     };
 
+                    /**
+                    * Lambda handler function - processes API requests for survey operations
+                    * @param {Object} event - AWS Lambda event object
+                    * @returns {Object} Response object with status code and body
+                    */
                     exports.handler = async (event) => {
-
+                        // Initialize response object with CORS headers
                         const response = {
                             "headers": {
                                 "Content-Type": "application/json",
@@ -550,182 +640,186 @@ Resources:
                         
                         let operation = undefined;
 
+                        // Validate incoming request
                         if (!validateRequest()) {
                             return response;
                         }
 
                         let body = {};
 
+                        // Process request based on operation type
                         switch (operation) {
                             case 'list':
-
+                                // Retrieve all surveys from the configuration table
                                 let data = await listSurveys();
 
                                 if (data) {
                                     response.statusCode = 200;
                                     body.success = "true";
                                     body.data = data;
-                                }
-                                else {
+                                } else {
                                     response.statusCode = 500;
-                                    body.sucess = false;
-                                    body.message = "Something went terribly wrong."
+                                    body.success = false;
+                                    body.message = "Something went terribly wrong.";
                                 }
 
                                 response.body = JSON.stringify(body);
-
                                 break;
 
                             case 'create':
+                                // Create or update a survey configuration
                                 let surveyData = JSON.parse(event.body).data;
 
                                 if (!surveyData) {
                                     response.statusCode = 400;
-                                    body.sucess = false;
-                                    body.message = "Unsupported operation."
-
+                                    body.success = false;
+                                    body.message = "Unsupported operation.";
                                     response.body = JSON.stringify(body);
-                                }
-                                else {
-
+                                } else {
+                                    // Transform questions array into object with numbered keys
                                     let questions = {};
                                     surveyData.questions.forEach((question, index) => {
-                                        questions[`question_${index + 1}`] = { S: question };
+                                        questions[`question_${index + 1}`] = question;
                                     });
 
+                                    // Transform flags array into object with numbered keys
                                     let flags = {};
                                     surveyData.flags.forEach((flag, index) => {
-                                        flags[`flag_question_${index + 1}`] = { N: flag.toString() };
+                                        flags[`flag_question_${index + 1}`] = flag;
                                     });
                                     
-                                    var surveyId = surveyData.surveyId == "" ? uuid() : surveyData.surveyId;
+                                    // Generate new UUID if surveyId not provided
+                                    const surveyId = surveyData.surveyId || uuid();
 
-                                    let item = {
+                                    // Prepare and execute DynamoDB put operation
+                                    const putCommand = new PutCommand({
                                         TableName: process.env.TABLE_SURVEYS_CONFIG,
                                         Item: {
-                                            surveyId: { S: surveyId },
-                                            surveyName: { S: surveyData.surveyName },
-                                            min: { N: surveyData.min.toString() },
-                                            max: { N: surveyData.max.toString() },
-                                            introPrompt: { S: surveyData.introPrompt },
-                                            outroPrompt: { S: surveyData.outroPrompt },
+                                            surveyId,
+                                            surveyName: surveyData.surveyName,
+                                            min: surveyData.min,
+                                            max: surveyData.max,
+                                            introPrompt: surveyData.introPrompt,
+                                            outroPrompt: surveyData.outroPrompt,
                                             ...questions,
                                             ...flags
                                         }
-                                    };
-
-                                    surveyData.questions.forEach((question, index) => {
-                                        item.Item[`question_${index + 1}`] = { S: question };
                                     });
 
-                                    let res = await ddb.putItem(item).promise();
+                                    await docClient.send(putCommand);
                                     
                                     response.statusCode = 200;
                                     body.success = true;
                                     body.data = surveyId;
-                                    
                                     response.body = JSON.stringify(body);
-                                    
                                 }
-
                                 break;
 
                             case 'delete':
-                                var surveyId = JSON.parse(event.body).data.surveyId;
+                                // Delete a survey configuration
+                                const surveyIdToDelete = JSON.parse(event.body).data.surveyId;
                                 
-                                let survey = {
+                                const deleteCommand = new DeleteCommand({
                                     TableName: process.env.TABLE_SURVEYS_CONFIG,
                                     Key: {
-                                        surveyId: { S: surveyId }
+                                        surveyId: surveyIdToDelete
                                     }
-                                };
+                                });
                                 
-                                let res = await ddb.deleteItem(survey).promise();
+                                await docClient.send(deleteCommand);
                                 
+                                response.statusCode = 200;
+                                body.success = true;
+                                response.body = JSON.stringify(body);
                                 break;
                                 
                             case 'results': 
-
-                                let queryParams = {
+                                // Retrieve survey results for a specific survey
+                                const scanCommand = new ScanCommand({
                                     TableName: process.env.TABLE_SURVEYS_RESULTS,
                                     FilterExpression: "surveyId = :id",
                                     ExpressionAttributeValues: {
                                         ":id": JSON.parse(event.body).data.surveyId
                                     }
-                                }
+                                });
                                 
+                                const results = await getResults(scanCommand);
                                 response.statusCode = 200;
                                 body.success = true;
-                                body.data = await getResults(queryParams);
-                                
+                                body.data = results;
                                 response.body = JSON.stringify(body);
-
                                 break;
 
                             default:
                                 response.statusCode = 400;
-                                body.sucess = false;
-                                body.message = "Unsupported operation."
-
+                                body.success = false;
+                                body.message = "Unsupported operation.";
                                 response.body = JSON.stringify(body);
-
                                 break;
                         }
 
                         return response;
                         
-                        async function getResults (params) {
+                        /**
+                        * Retrieves all results for a specific survey
+                        * Handles pagination for large result sets
+                        * @param {ScanCommand} scanCommand - Prepared scan command for DynamoDB
+                        * @returns {Array} Array of survey results
+                        */
+                        async function getResults(scanCommand) {
                             const scanResults = [];
+                            let lastEvaluatedKey;
                             
-                            var lastEvaluatuedKey;
                             do {
-                                const items = await docClient.scan(params).promise();
-                                lastEvaluatuedKey = items.LastEvaluatedKey
-                                items.Items.forEach((item) => scanResults.push(item));
-                                params.ExclusiveStartKey = items.LastEvaluatedKey;
-                            } while (typeof lastEvaluatuedKey !== "undefined");
+                                const response = await docClient.send(scanCommand);
+                                lastEvaluatedKey = response.LastEvaluatedKey;
+                                scanResults.push(...(response.Items || []));
+                                if (lastEvaluatedKey) {
+                                    scanCommand.input.ExclusiveStartKey = lastEvaluatedKey;
+                                }
+                            } while (lastEvaluatedKey);
 
                             return scanResults;
+                        }
 
-                        };
-
+                        /**
+                        * Retrieves all survey configurations
+                        * @returns {Array|undefined} Array of survey configurations or undefined on error
+                        */
                         async function listSurveys() {
                             try {
                                 return await scanTable(process.env.TABLE_SURVEYS_CONFIG);
-                            }
-                            catch (e) {
+                            } catch (e) {
                                 console.log(e);
-
                                 return undefined;
                             }
                         }
 
+                        /**
+                        * Validates the incoming request
+                        * Checks for valid JSON body and operation type
+                        * @returns {boolean} True if request is valid, false otherwise
+                        */
                         function validateRequest() {
-
                             if (event.httpMethod === 'POST') {
                                 try {
                                     var body = JSON.parse(event.body);
-                                }
-                                catch (e) {
+                                } catch (e) {
                                     console.log(e);
-
                                     response.statusCode = 400;
                                     response.body = "Body is not valid JSON";
-
                                     return false;
                                 }
 
                                 if (!body.operation) {
                                     response.statusCode = 400;
                                     response.body = "No operation specified";
-
                                     return false;
                                 }
 
                                 if (!OPERATIONS.includes(body.operation)) {
                                     response.statusCode = 400;
                                     response.body = "Unsupported operation";
-
                                     return false;
                                 }
 
@@ -735,7 +829,6 @@ Resources:
                             return true;
                         }
                     };
-
             Environment:
                 Variables:
                     TABLE_SURVEYS_CONFIG: !Ref SurveysConfigDDBTable
@@ -748,7 +841,7 @@ Resources:
         Properties:
             Description: "Called by Amazon Connect contact flows to retrieve a survey configuration"
             Handler: index.handler
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Role: !GetAtt LambdaGetSurveyConfigRole.Arn
             FunctionName: !Sub ${AWS::StackName}-surveys-get-survey-config
             Timeout: 12
@@ -757,52 +850,72 @@ Resources:
                     // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
                     // SPDX-License-Identifier: MIT-0
 
-                    const AWS = require('aws-sdk');
-                    const ddb = new AWS.DynamoDB();
+                    // Import AWS SDK v3 DynamoDB clients
+                    const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+                    const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
+                    // Initialize the DynamoDB client
+                    const client = new DynamoDBClient({});
+                    // Create a document client with marshalling enabled
+                    const docClient = DynamoDBDocumentClient.from(client);
+
+                    /**
+                    * Lambda handler to retrieve survey configuration from DynamoDB
+                    * Used by Amazon Connect to fetch survey details during contact flows
+                    * 
+                    * @param {Object} event - Lambda event containing survey parameters
+                    * @returns {Object} Survey configuration including questions and metadata
+                    */
                     exports.handler = async (event) => {
-
+                        // Initialize response object
                         const response = {};
 
-                        var params = {
+                        // Prepare DynamoDB query parameters
+                        const params = {
                             TableName: process.env.TABLE,
                             Key: {
-                                'surveyId': { S: event.Details.Parameters.surveyId }
+                                'surveyId': event.Details.Parameters.surveyId
                             }
                         };
                         
                         try {
-                            let res = await ddb.getItem(params).promise();
+                            // Fetch survey configuration from DynamoDB
+                            const command = new GetCommand(params);
+                            const result = await docClient.send(command);
+                            
                             response.statusCode = 200;
                             
-                            if (res.Item) {
+                            if (result.Item) {
                                 response.message = 'OK';
                                 
-                                let size = 0;
-                                Object.keys(res.Item).forEach(k => {
-                                    if (res.Item[k].S) {
-                                        response[k] = res.Item[k].S;
-                                    }
+                                // Count the number of questions in the survey
+                                let questionCount = 0;
+                                
+                                // Process each field in the DynamoDB item
+                                Object.keys(result.Item).forEach(key => {
+                                    // Copy the item value to the response
+                                    response[key] = result.Item[key];
                                     
-                                    if (res.Item[k].N) {
-                                        response[k] = res.Item[k].N;
+                                    // Count fields that start with 'question' to determine survey size
+                                    if (key.startsWith('question')) {
+                                        questionCount++;
                                     }
-                                    
-                                    size = k.startsWith('question') ? size + 1 : size;
                                 });
                                 
-                                response.surveySize = size;
+                                // Add the total number of questions to the response
+                                response.surveySize = questionCount;
                             } else {
+                                // If no survey found, return appropriate message
                                 response.message = `Couldn't find configuration for survey with id [${event.Details.Parameters.surveyId}]`;
                             }
                             
                         } catch (err) {
+                            // Log any errors that occur during execution
                             console.log(err);
                         }
                         
                         return response;
                     };
-
             Environment:
                 Variables:
                     TABLE: !Ref SurveysConfigDDBTable
@@ -814,7 +927,7 @@ Resources:
         Properties:
             Description: "Called by Amazon Connect contact flows to determine if tasks should be sent to alert on survey results"
             Handler: index.handler
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Role: !GetAtt LambdaProcessSurveysFlagsRole.Arn
             FunctionName: !Sub ${AWS::StackName}-process-survey-flags
             Timeout: 12
@@ -829,71 +942,107 @@ Resources:
                     // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
                     // SPDX-License-Identifier: MIT-0
 
-                    const AWS = require('aws-sdk');
-                    const connect = new AWS.Connect();
+                    // Import AWS SDK v3 Connect client
+                    const { ConnectClient, StartTaskContactCommand } = require("@aws-sdk/client-connect");
+                    const { v4: uuid } = require("uuid");
 
-                    const { v4: uuid } = require('uuid');
+                    // Initialize the Connect client
+                    const connect = new ConnectClient({});
 
-                    String.prototype.rsplit = function(sep, maxsplit) {
+                    /**
+                    * Helper method to split a string from the right
+                    * Used for parsing instance ARN
+                    * @param {string} sep - Separator to split on
+                    * @param {number} maxsplit - Maximum number of splits
+                    * @returns {Array} Array of split string parts
+                    */
+                    String.prototype.rsplit = function (sep, maxsplit) {
                         var split = this.split(sep);
                         return maxsplit ? [split.slice(0, -maxsplit).join(sep)].concat(split.slice(-maxsplit)) : split;
                     };
 
+                    /**
+                    * Lambda handler to process survey flags and create tasks for flagged responses
+                    * @param {Object} event - Event containing survey response details
+                    * @returns {Object} Response with status code
+                    */
                     exports.handler = async (event) => {
-
+                        // Object to store questions that were flagged
                         let flagged = {};
-                        let surveyKeys = Object.keys(event.Details.ContactData.Attributes).filter(o => o.startsWith("survey_result_"));
-                        surveyKeys.sort();
                         
+                        // Get all survey result keys from contact attributes
+                        let surveyKeys = Object.keys(event.Details.ContactData.Attributes)
+                            .filter((o) => o.startsWith("survey_result_"));
+                        surveyKeys.sort();
+
+                        // Process each survey question to check for flags
                         surveyKeys.forEach((key, index) => {
                             console.log(`Processing ${key}`);
-                            if (event.Details.Parameters[`flag_question_${index + 1}`] && event.Details.Parameters[`flag_question_${index + 1}`] != '') {
-                                console.log(`Flag exists for ${key} with threshold ${event.Details.Parameters[`flag_question_${index + 1}`]}`);
-                                if (parseInt(event.Details.ContactData.Attributes[key]) < parseInt(event.Details.Parameters[`flag_question_${index + 1}`])) {
+                            
+                            // Check if a flag threshold exists for this question
+                            if (
+                                event.Details.Parameters[`flag_question_${index + 1}`] &&
+                                event.Details.Parameters[`flag_question_${index + 1}`] != ""
+                            ) {
+                                console.log(
+                                    `Flag exists for ${key} with threshold ${event.Details.Parameters[`flag_question_${index + 1}`]}`
+                                );
+                                
+                                // Compare response value against flag threshold
+                                if (
+                                    parseInt(event.Details.ContactData.Attributes[key]) <=
+                                    parseInt(event.Details.Parameters[`flag_question_${index + 1}`])
+                                ) {
                                     flagged[key] = event.Details.Parameters[`flag_question_${index + 1}`];
                                 }
                             }
                         });
 
+                        // If any responses were flagged, create a task
                         if (Object.keys(flagged).length > 0) {
-
-                            let instanceId = event['Details']['ContactData']['InstanceARN'].rsplit("/", 1)[1];
+                            // Extract instance ID from the ARN
+                            let instanceId = event["Details"]["ContactData"]["InstanceARN"].rsplit("/", 1)[1];
                             let description = "";
-                            
-                            Object.keys(flagged).forEach(key => {
-                                description += `Question ${key.substr(key.length - 1)}: ${flagged[key]}\n`;
+
+                            // Build description including all flagged questions
+                            Object.keys(flagged).forEach((key) => {
+                                description += `Question ${key.substr(key.length - 1)}: ${
+                                    event["Details"]["ContactData"]["Attributes"][key]
+                                }\n`;
                             });
-                            
-                            var params = {
+
+                            // Prepare parameters for creating the task
+                            const params = {
                                 ContactFlowId: process.env.CONTACT_FLOW_ID,
                                 InstanceId: instanceId,
-                                Name: 'Flagged Post Call Survey',
+                                Name: "Flagged Post Call Survey",
                                 Attributes: {
-                                    'surveyId': event['Details']['ContactData']['Attributes']['surveyId'],
-                                    'contactId': event['Details']['ContactData']['ContactId'],
+                                    surveyId: event["Details"]["ContactData"]["Attributes"]["surveyId"],
+                                    contactId: event["Details"]["ContactData"]["ContactId"],
                                 },
                                 ClientToken: uuid(),
                                 Description: description,
                                 References: {
-                                    'CTR': {
-                                        Type: 'URL',
-                                        Value: `https://${process.env.INSTANCE_NAME}.my.connect.aws/contact-trace-records/details/${event['Details']['ContactData']['ContactId']}`
+                                    CTR: {
+                                        Type: "URL",
+                                        Value: `https://${process.env.INSTANCE_NAME}.my.connect.aws/contact-trace-records/details/${event["Details"]["ContactData"]["ContactId"]}`,
                                     },
                                 },
                             };
-                            
+
                             try {
-                                let res = await connect.startTaskContact(params).promise();
+                                // Create task in Connect using SDK v3
+                                const command = new StartTaskContactCommand(params);
+                                await connect.send(command);
                             } catch (err) {
                                 console.log(err);
                             }
-                            
                         }
 
-                        // TODO implement
+                        // Return success response
                         const response = {
                             statusCode: 200,
-                            body: JSON.stringify('OK'),
+                            body: JSON.stringify("OK"),
                         };
                         return response;
                     };
@@ -905,7 +1054,7 @@ Resources:
         Properties:
             Description: "A set of utilities for the solution to work"
             Handler: index.handler
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Role: !GetAtt LambdaSurveysUtilsRole.Arn
             FunctionName: !Sub ${AWS::StackName}-utils
             Timeout: 12
@@ -914,50 +1063,69 @@ Resources:
                     // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
                     // SPDX-License-Identifier: MIT-0
 
+                    /**
+                    * Lambda handler for survey utility functions
+                    * Supports operations for managing survey flow and input validation
+                    * 
+                    * @param {Object} event - Event from Amazon Connect containing operation and parameters
+                    * @returns {Object} Response object with operation-specific data
+                    */
                     exports.handler = async (event) => {
-                        
+                        // Initialize response with all parameters from the event
                         const response = {
                             ...event.Details.Parameters
                         };
                         
                         const operation = event.Details.Parameters.operation;
                         
+                        // If no operation specified, return early with success
                         if (!operation) {
                             response.success = true;
-                            response.message = "No operation in input. Nothing to do."
+                            response.message = "No operation in input. Nothing to do.";
                             return response;
                         }
                         
+                        // Process different operations
                         switch (operation) {
                             case "getNextSurveyQuestion":
+                                // Get next question in the survey sequence
                                 const data = getNextSurveyQuestion();
                                 response.nextQuestion = data.nextQuestion;
                                 response.newCounter = data.newCounter;
                                 response.currentQuestionIndex = data.currentQuestionIndex;
-                                
                                 break;
                                 
                             case "validateInput":
+                                // Validate user input against min/max bounds
                                 response.validInput = `${validateInput()}`;
                                 response.message = `Your answer is not between ${event.Details.Parameters.min} and ${event.Details.Parameters.max}.`;
                                 response.nextQuestion = event.Details.Parameters[`question_${event.Details.ContactData.Attributes.loopCounter}`];
-                                
                                 break;
                                 
                             default:
+                                // Handle unsupported operations
                                 response.success = false;
-                                response.message = "Unsupported operation."
+                                response.message = "Unsupported operation.";
                         }
 
                         return response;
                         
+                        /**
+                        * Validates if the user input falls within the specified min/max bounds
+                        * @returns {boolean} True if input is valid, false otherwise
+                        */
                         function validateInput() {
                             let min = event.Details.Parameters.min;
                             let max = event.Details.Parameters.max;
                             
-                            return parseInt(min) <= parseInt(event.Details.Parameters.input) && parseInt(max) >= parseInt(event.Details.Parameters.input);
+                            return parseInt(min) <= parseInt(event.Details.Parameters.input) && 
+                                parseInt(max) >= parseInt(event.Details.Parameters.input);
                         }
                         
+                        /**
+                        * Gets the next survey question and updates the question counter
+                        * @returns {Object} Object containing next question details and updated counter
+                        */
                         function getNextSurveyQuestion() {
                             let res = {
                                 currentQuestionIndex: event.Details.ContactData.Attributes.loopCounter,
@@ -1342,33 +1510,55 @@ Resources:
             Handler: index.handler
             Role: !GetAtt CognitoCustomResourceLambdaFunctionRole.Arn
             Timeout: 15
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Code:
                 ZipFile: |
-                    const AWS = require("aws-sdk");
+                    // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+                    // SPDX-License-Identifier: MIT-0
+
+                    // Import AWS SDK v3 Cognito Identity Provider client
+                    const { 
+                        CognitoIdentityProviderClient, 
+                        AdminUpdateUserAttributesCommand 
+                    } = require("@aws-sdk/client-cognito-identity-provider");
                     const https = require("https");
                     const url = require("url");
-                    const client = new AWS.CognitoIdentityServiceProvider();
 
+                    // Initialize Cognito Identity Provider client
+                    const client = new CognitoIdentityProviderClient({});
+
+                    /**
+                    * Lambda handler for Custom Resource to validate Cognito user
+                    * This function is typically called by CloudFormation during stack operations
+                    * 
+                    * @param {Object} event - CloudFormation Custom Resource event
+                    * @param {Object} context - Lambda context object
+                    * @returns {Object} Response object with status code and empty body
+                    */
                     exports.handler = async (event, context) => {
+                        // Handle stack deletion - return success immediately
                         if (event.RequestType === "Delete") {
-                          await send(event, context, "SUCCESS");
-                          return;
+                            await send(event, context, "SUCCESS");
+                            return;
                         }
-                        
+
+                        // Prepare input for updating user attributes
                         const input = {
                             UserPoolId: event.ResourceProperties.UserPoolId,
                             Username: "admin",
-                            UserAttributes: [{
-                            Name: "email_verified",
-                            Value: "true"
-                            }]
+                            UserAttributes: [
+                                {
+                                    Name: "email_verified",
+                                    Value: "true",
+                                },
+                            ],
                         };
 
                         try {
-                            await client.adminUpdateUserAttributes(input).promise();
-                        }
-                        catch (e) {
+                            // Update admin user attributes to verify email
+                            const command = new AdminUpdateUserAttributesCommand(input);
+                            await client.send(command);
+                        } catch (e) {
                             console.log(e);
                             await send(event, context, "FAILED");
                         }
@@ -1381,12 +1571,23 @@ Resources:
                         await send(event, context, "SUCCESS");
 
                         return response;
+                    };
 
-
-
-
-                        async function send(event, context, responseStatus, responseData, physicalResourceId, noEcho) {
-                            var responseBody = JSON.stringify({
+                    /**
+                    * Sends response back to CloudFormation
+                    * This is required for Custom Resources to signal completion to CloudFormation
+                    * 
+                    * @param {Object} event - CloudFormation Custom Resource event
+                    * @param {Object} context - Lambda context object
+                    * @param {string} responseStatus - Status of the operation (SUCCESS/FAILED)
+                    * @param {Object} responseData - Additional data to send back to CloudFormation
+                    * @param {string} physicalResourceId - Physical ID of the custom resource
+                    * @param {boolean} noEcho - Whether to mask the response in CloudFormation logs
+                    * @returns {Promise} Promise that resolves when the response is sent
+                    */
+                    async function send(event, context, responseStatus, responseData, physicalResourceId, noEcho) {
+                        // Prepare the response body for CloudFormation
+                        var responseBody = JSON.stringify({
                             Status: responseStatus,
                             Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
                             PhysicalResourceId: physicalResourceId || context.logStreamName,
@@ -1395,12 +1596,15 @@ Resources:
                             LogicalResourceId: event.LogicalResourceId,
                             NoEcho: noEcho || false,
                             Data: responseData,
-                            });
+                        });
 
-                            console.log("Response body:\n", responseBody);
+                        console.log("Response body:\n", responseBody);
 
-                            var parsedUrl = url.parse(event.ResponseURL);
-                            var options = {
+                        // Parse the pre-signed URL provided by CloudFormation
+                        var parsedUrl = url.parse(event.ResponseURL);
+                        
+                        // Prepare the HTTPS request options
+                        var options = {
                             hostname: parsedUrl.hostname,
                             port: 443,
                             path: parsedUrl.path,
@@ -1409,34 +1613,36 @@ Resources:
                                 "content-type": "",
                                 "content-length": responseBody.length,
                             },
-                            };
+                        };
 
-                            const sendPromise = new Promise((_res, _rej) => {
+                        // Create a promise to handle the HTTPS request
+                        const sendPromise = new Promise((_res, _rej) => {
                             try {
-                                var request = https.request(options, function(response) {
-                                console.log("Status code: " + response.statusCode);
-                                console.log("Status message: " + response.statusMessage);
-                                context.done();
-                                _res();
+                                // Send the HTTPS request to CloudFormation
+                                var request = https.request(options, function (response) {
+                                    console.log("Status code: " + response.statusCode);
+                                    console.log("Status message: " + response.statusMessage);
+                                    context.done();
+                                    _res();
                                 });
 
-                                request.on("error", function(error) {
-                                console.log("send(..) failed executing https.request(..): " + error);
-                                context.done();
-                                _rej();
+                                // Handle any errors in the HTTPS request
+                                request.on("error", function (error) {
+                                    console.log("send(..) failed executing https.request(..): " + error);
+                                    context.done();
+                                    _rej();
                                 });
 
+                                // Send the response body
                                 request.write(responseBody);
                                 request.end();
-                            }
-                            catch (e) {
+                            } catch (e) {
                                 console.log(e);
                             }
-                            });
+                        });
 
-                            return await sendPromise;
-                        }
-                    };
+                        return await sendPromise;
+                    }
 
     CognitoCustomResourceLambdaFunctionRole:
         Type: AWS::IAM::Role
@@ -1481,151 +1687,128 @@ Resources:
             Handler: index.handler
             Role: !GetAtt CustomResourceS3LambdaExecutionRole.Arn
             Timeout: 360
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Code:
                 ZipFile: |
-                    const AWS = require("aws-sdk");
-                    var response = require('cfn-response');
-                    const s3 = new AWS.S3();
+                    const { S3Client, ListObjectsV2Command, CopyObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+                    const response = require('cfn-response');
 
-                    exports.handler = (event, context) => {
+                    // Initialize S3 client
+                    const s3Client = new S3Client();
 
+                    exports.handler = async (event, context) => {
                         const request = event.RequestType;
 
-                        switch (request) {
-                            case "Create":
-                                var params = {
-                                    Bucket: event.ResourceProperties.SourceBucket,
-                                    Prefix: "frontend"
-                                }
+                        try {
+                            switch (request) {
+                                case "Create":
+                                case "Update":
+                                    // Set parameters for listing objects
+                                    const listParams = {
+                                        Bucket: event.ResourceProperties.SourceBucket,
+                                        Prefix: "frontend"
+                                    };
 
-                                console.log(params);
+                                    console.log("List parameters:", listParams);
 
-                                getBucketContent(params).then((data) => {
-                                        copyObjects(data).then((data) => {
-                                                console.log("Object copied successfully");
-                                                response.send(event, context, response.SUCCESS, {});
-                                            })
-                                            .catch((e) => {
-                                                console.log(e);
-                                                response.send(event, context, response.FAILED, {});
-                                            })
-                                    })
-                                    .catch(e => {
-                                        console.log(e);
-                                    })
+                                    // Get bucket contents and copy objects
+                                    const objects = await getBucketContent(listParams);
+                                    await copyObjects(objects);
+                                    console.log("Objects copied successfully");
+                                    await response.send(event, context, response.SUCCESS, {});
+                                    break;
 
-                                break;
-                            case "Update":
-                                var params = {
-                                    Bucket: event.ResourceProperties.SourceBucket,
-                                    Prefix: "frontend"
-                                }
-                                getBucketContent(params).then((data) => {
-
-                                        copyObjects(data).then((data) => {
-                                                console.log("Object copied successfully");
-                                                response.send(event, context, response.SUCCESS, {});
-                                            })
-                                            .catch((e) => {
-                                                console.log(e);
-                                                response.send(event, context, response.FAILED, {});
-                                            })
-                                    })
-                                    .catch(e => {
-                                        console.log(e);
-                                        response.send(event, context, response.FAILED, {});
-                                    })
-
-                                break;
-                            case "Delete":
-                                var params = {
-                                    Bucket: event.ResourceProperties.DestinationBucket,
-                                    Prefix: ""
-                                }
-                                getBucketContent(params).then((data) => {
-
-                                        deleteObjects(data).then((data) => {
-                                                console.log("Objects deleted successfully");
-                                                response.send(event, context, response.SUCCESS, {});
-                                            })
-                                            .catch((e) => {
-                                                console.log(e);
-                                                response.send(event, context, response.FAILED, {});
-                                            })
-                                    })
-                                    .catch(e => {
-                                        console.log(e);
-                                        response.send(event, context, response.FAILED, {});
-                                    })
-
-                                break;
-                            default:
-                                console.log("Unsupported operation.");
-                                response.send(event, context, response.FAILED, {});
-                                console.log("Sending FAILED from default");
-                        }
-
-                        function getBucketContent(params) {
-                            return new Promise(async (res, rej) => {
-                                try {
-                                    const list = await s3.listObjectsV2(params).promise();
-
-                                    console.log("1. Listed content");
-                                    res(list);
-                                }
-                                catch (e) {
-                                    rej(e);
-                                }
-
-                            });
-                        }
-
-                        function copyObjects(data) {
-                            return new Promise(async (res, rej) => {
-                                for (let index in data.Contents) {
-                                    var params = {
+                                case "Delete":
+                                    // Set parameters for deletion
+                                    const deleteListParams = {
                                         Bucket: event.ResourceProperties.DestinationBucket,
-                                        CopySource: event.ResourceProperties.SourceBucket + "/" + data.Contents[index].Key,
-                                        Key: data.Contents[index].Key.replace("frontend/", "")
-                                    }
+                                        Prefix: ""
+                                    };
 
-                                    try {
-                                        const res = await s3.copyObject(params).promise();
-                                    }
-                                    catch (e) {
-                                        rej(e);
-                                    }
-                                }
-                                console.log("1. Finished copying");
+                                    // Get bucket contents and delete objects
+                                    const objectsToDelete = await getBucketContent(deleteListParams);
+                                    await deleteObjects(objectsToDelete);
+                                    console.log("Objects deleted successfully");
+                                    await response.send(event, context, response.SUCCESS, {});
+                                    break;
 
-                                res(true);
-                            });
+                                default:
+                                    console.log("Unsupported operation.");
+                                    await response.send(event, context, response.FAILED, {});
+                            }
+                        } catch (error) {
+                            console.error("Error:", error);
+                            await response.send(event, context, response.FAILED, {});
                         }
 
-                        function deleteObjects(data) {
-                            return new Promise(async (res, rej) => {
-                                for (let index in data.Contents) {
-                                    var params = {
+                        /**
+                        * Lists objects in an S3 bucket
+                        * @param {Object} params - Parameters for listing objects
+                        * @returns {Promise<Object>} List of objects in the bucket
+                        */
+                        async function getBucketContent(params) {
+                            try {
+                                const command = new ListObjectsV2Command(params);
+                                const response = await s3Client.send(command);
+                                console.log("Successfully listed bucket contents");
+                                return response;
+                            } catch (error) {
+                                console.error("Error listing bucket contents:", error);
+                                throw error;
+                            }
+                        }
+
+                        /**
+                        * Copies objects from source to destination bucket
+                        * @param {Object} data - List of objects to copy
+                        * @returns {Promise<boolean>} True if copying succeeds
+                        */
+                        async function copyObjects(data) {
+                            try {
+                                for (const item of data.Contents) {
+                                    const copyParams = {
                                         Bucket: event.ResourceProperties.DestinationBucket,
-                                        Key: data.Contents[index].Key
-                                    }
+                                        CopySource: `${event.ResourceProperties.SourceBucket}/${item.Key}`,
+                                        Key: item.Key.replace("frontend/", "")
+                                    };
 
-                                    try {
-                                        console.log(params);
-                                        const res = await s3.deleteObject(params).promise();
-                                        console.log(res)
-                                    }
-                                    catch (e) {
-                                        rej(e);
-                                    }
+                                    const command = new CopyObjectCommand(copyParams);
+                                    await s3Client.send(command);
                                 }
-                                console.log("1. Finished deleting");
+                                console.log("Successfully completed copying all objects");
+                                return true;
+                            } catch (error) {
+                                console.error("Error copying objects:", error);
+                                throw error;
+                            }
+                        }
 
-                                res(true);
-                            });
+                        /**
+                        * Deletes objects from a bucket
+                        * @param {Object} data - List of objects to delete
+                        * @returns {Promise<boolean>} True if deletion succeeds
+                        */
+                        async function deleteObjects(data) {
+                            try {
+                                for (const item of data.Contents) {
+                                    const deleteParams = {
+                                        Bucket: event.ResourceProperties.DestinationBucket,
+                                        Key: item.Key
+                                    };
+
+                                    console.log("Deleting object:", deleteParams);
+                                    const command = new DeleteObjectCommand(deleteParams);
+                                    await s3Client.send(command);
+                                }
+                                console.log("Successfully completed deleting all objects");
+                                return true;
+                            } catch (error) {
+                                console.error("Error deleting objects:", error);
+                                throw error;
+                            }
                         }
                     };
+
 
     CustomResourceS3LambdaExecutionRole:
         Type: AWS::IAM::Role
@@ -1688,39 +1871,64 @@ Resources:
             Handler: index.handler
             Role: !GetAtt CustomResourceLambdaExecutionRole.Arn
             Timeout: 10
-            Runtime: nodejs16.x
+            Runtime: nodejs22.x
             Code:
                 ZipFile: |
-                    var response = require('cfn-response');
-                    const AWS = require('aws-sdk');
-                    const s3 = new AWS.S3();
+                    const response = require('cfn-response');
+                    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-                    exports.handler = (event, context) => {
+                    // Initialize S3 client
+                    const s3Client = new S3Client();
 
+                    exports.handler = async (event, context) => {
                         const request = event.RequestType;
 
-                        if (request == "Create" || request == "Update") {
-                            const content = `window.app_configuration = { cognito_pool_id: "${event.ResourceProperties.CognitoPoolId}", cognito_client_id: "${event.ResourceProperties.CognitoClientId}", api_endpoint: "/dev/surveys" }`;
+                        try {
+                            if (request === "Create" || request === "Update") {
+                                // Create the configuration content string
+                                const content = `window.app_configuration = { 
+                                    cognito_pool_id: "${event.ResourceProperties.CognitoPoolId}",
+                                    cognito_client_id: "${event.ResourceProperties.CognitoClientId}", 
+                                    api_endpoint: "/dev/surveys" 
+                                }`;
 
-                            var params = {
-                                Body: content,
-                                Bucket: event.ResourceProperties.BucketName,
-                                Key: "config.js",
-                                ContentType: "application/javascript"
+                                // Set up parameters for S3 put operation
+                                const params = {
+                                    Body: content,
+                                    Bucket: event.ResourceProperties.BucketName,
+                                    Key: "config.js",
+                                    ContentType: "application/javascript"
+                                };
+
+                                // Upload the configuration file to S3
+                                await uploadToS3(params);
+                                await response.send(event, context, response.SUCCESS, {});
+                            } else {
+                                // For Delete requests, simply return success
+                                await response.send(event, context, response.SUCCESS, {});
                             }
-
-                            s3.putObject(params, function(err, data) {
-                                if (err) {
-                                    console.log(err);
-                                    response.send(event, context, response.FAILED, {});
-                                } else {
-                                    response.send(event, context, response.SUCCESS, {});
-                                }
-                            });        
-                        } else {
-                            response.send(event, context, response.SUCCESS, {});
+                        } catch (error) {
+                            console.error('Error:', error);
+                            await response.send(event, context, response.FAILED, {});
                         }
                     };
+
+                    /**
+                    * Uploads content to S3 bucket
+                    * @param {Object} params - Parameters for S3 put operation
+                    * @returns {Promise} Result of the S3 put operation
+                    */
+                    async function uploadToS3(params) {
+                        try {
+                            const command = new PutObjectCommand(params);
+                            const result = await s3Client.send(command);
+                            console.log('Successfully uploaded config to S3');
+                            return result;
+                        } catch (error) {
+                            console.error('Error uploading to S3:', error);
+                            throw error;
+                        }
+                    }
 
     CustomResourceLambdaExecutionRole:
         Type: AWS::IAM::Role

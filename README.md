@@ -66,7 +66,7 @@ Typically, this solution should be deployed by a user with full access to your A
 
 4. Once the stack is deployed, in the **Output** tab, note the value of the **AdminUser** and the URL of the application.
 
-5. Navigate to the URL noted at step 8. Log in to the application with the *Username* collected at step 8, and the *password* received during the stack deployment.
+5. Navigate to the URL noted just above. Log in to the application with the *Username* collected in the output of the Cloudformation stack, and the *password* received during the  deployment.
 
 **Note:** You will be required to change your password at first login.
 
