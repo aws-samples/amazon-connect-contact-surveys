@@ -20,7 +20,7 @@ Parameters:
         Description: The contact flow you want generated tasks to be directed to
     AdminEmailAddress:
         Type: String
-        Description: "The email address for the initial user of the solution"
+        Description: "The email address for the initial survey administrator of the solution"
 
 Resources:
     #####################################################
