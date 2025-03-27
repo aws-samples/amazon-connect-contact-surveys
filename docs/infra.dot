@@ -1,0 +1,15 @@
+digraph INFRA {
+  node [ color = "black", fillcolor = "#E6E6E6", height =1, style = "filled,bold,rounded", fontname = "Arial" ];
+  "BlogArtifacts" [ label = "BlogArtifacts
+(AWS::S3::Bucket)", shape =cylinder, fillcolor = "#FFF5CD" ];
+  "CopyArtifactsLambdaIamRole" [ label = "CopyArtifactsLambdaIamRole
+(AWS::IAM::Role)", shape =rectangle ];
+  "CustomResourceCopySourceFunction" [ label = "CustomResourceCopySourceFunction
+(AWS::Lambda::Function)", shape =rectangle, fillcolor = "#B7E0FF" ];
+  "CopyCfnStacksLambdaTrigger" [ label = "CopyCfnStacksLambdaTrigger
+(Custom::CopyCfnResources)", shape =rectangle ];
+  "CopyArtifactsLambdaIamRole" -> "BlogArtifacts";
+  "CustomResourceCopySourceFunction" -> "CopyArtifactsLambdaIamRole";
+  "CopyCfnStacksLambdaTrigger" -> "CustomResourceCopySourceFunction";
+  "CopyCfnStacksLambdaTrigger" -> "BlogArtifacts";
+}
