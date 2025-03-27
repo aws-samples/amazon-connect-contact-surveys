@@ -1,0 +1,329 @@
+openapi: 3.0.0
+info:
+  title: Amazon Connect Post-Contact Survey API
+  description: API for managing surveys and retrieving results
+  version: 1.0.0
+servers:
+  - url: https://{apiGatewayId}.execute-api.{region}.amazonaws.com/dev
+    variables:
+      apiGatewayId:
+        default: your-api-gateway-id
+        description: API Gateway ID
+      region:
+        default: us-west-2
+        description: AWS Region
+paths:
+  /surveys:
+    post:
+      summary: Manage surveys
+      description: Create, update, list, or delete surveys
+      security:
+        - CognitoAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ListSurveysRequest'
+                - $ref: '#/components/schemas/CreateSurveyRequest'
+                - $ref: '#/components/schemas/DeleteSurveyRequest'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ListSurveysResponse'
+                  - $ref: '#/components/schemas/CreateSurveyResponse'
+                  - $ref: '#/components/schemas/DeleteSurveyResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    options:
+      summary: CORS support
+      description: Enable CORS by returning correct headers
+      responses:
+        '200':
+          description: CORS headers
+          headers:
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+  /results:
+    post:
+      summary: Retrieve survey results
+      description: Get results for a specific survey
+      security:
+        - CognitoAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetResultsRequest'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetResultsResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    options:
+      summary: CORS support
+      description: Enable CORS by returning correct headers
+      responses:
+        '200':
+          description: CORS headers
+          headers:
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ListSurveysRequest:
+      type: object
+      required:
+        - operation
+      properties:
+        operation:
+          type: string
+          enum: [list]
+    CreateSurveyRequest:
+      type: object
+      required:
+        - operation
+        - data
+      properties:
+        operation:
+          type: string
+          enum: [create]
+        data:
+          type: object
+          required:
+            - surveyName
+            - min
+            - max
+            - introPrompt
+            - outroPrompt
+            - questions
+            - flags
+          properties:
+            surveyId:
+              type: string
+              description: Survey ID (required for updates, omit for new surveys)
+            surveyName:
+              type: string
+              description: Name of the survey
+            min:
+              type: integer
+              description: Minimum rating value
+            max:
+              type: integer
+              description: Maximum rating value
+            introPrompt:
+              type: string
+              description: Introduction prompt
+            outroPrompt:
+              type: string
+              description: Conclusion prompt
+            questions:
+              type: array
+              description: Survey questions
+              items:
+                type: string
+            flags:
+              type: array
+              description: Flag thresholds for questions
+              items:
+                type: integer
+    DeleteSurveyRequest:
+      type: object
+      required:
+        - operation
+        - data
+      properties:
+        operation:
+          type: string
+          enum: [delete]
+        data:
+          type: object
+          required:
+            - surveyId
+          properties:
+            surveyId:
+              type: string
+              description: Survey ID to delete
+    GetResultsRequest:
+      type: object
+      required:
+        - operation
+        - data
+      properties:
+        operation:
+          type: string
+          enum: [results]
+        data:
+          type: object
+          required:
+            - surveyId
+          properties:
+            surveyId:
+              type: string
+              description: Survey ID to get results for
+    ListSurveysResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              surveyId:
+                type: string
+                example: 550e8400-e29b-41d4-a716-446655440000
+              surveyName:
+                type: string
+                example: Customer Satisfaction
+              min:
+                type: integer
+                example: 1
+              max:
+                type: integer
+                example: 5
+              introPrompt:
+                type: string
+                example: Please rate your experience
+              outroPrompt:
+                type: string
+                example: Thank you for your feedback
+              question_1:
+                type: string
+                example: How satisfied were you with our service?
+              question_2:
+                type: string
+                example: How likely are you to recommend us?
+              flag_question_1:
+                type: integer
+                example: 3
+              flag_question_2:
+                type: integer
+                example: 3
+    CreateSurveyResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: string
+          example: 550e8400-e29b-41d4-a716-446655440000
+    DeleteSurveyResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+    GetResultsResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              contactId:
+                type: string
+                example: 12345678-1234-1234-1234-123456789012
+              surveyId:
+                type: string
+                example: 550e8400-e29b-41d4-a716-446655440000
+              survey_result_1:
+                type: string
+                example: "4"
+              survey_result_2:
+                type: string
+                example: "5"
+              timestamp:
+                type: integer
+                example: 1647532800
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Something went terribly wrong.
