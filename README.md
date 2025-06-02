@@ -48,7 +48,7 @@ Typically, this solution should be deployed by a user with full access to your A
 
 1. Click on the "Launch Stack" button to deploy the solution in your preferred region. This will be he same region that was used to deploy your Amazon Connect instance.
 
-[![cloudformation-launch-button](img/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=Production&templateURL=https://aws-contact-center-blog.s3.us-west-2.amazonaws.com/amazon-connect-post-call-surveys/contact-surveys-amazon-connect.yaml)
+[![cloudformation-launch-button](img/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=Production&templateURL=https://github.com/aws-samples/amazon-connect-contact-surveys/blob/main/deployment/contact-surveys-amazon-connect.yaml)
 
 2. Provide the required parameters:
 - an email address for the initial user of the solution
