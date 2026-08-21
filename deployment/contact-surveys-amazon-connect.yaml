@@ -318,6 +318,8 @@ Resources:
             UserPoolName: !Sub ${AWS::StackName}-user-pool
             UsernameConfiguration:
                 CaseSensitive: false
+            AdminCreateUserConfig:
+                AllowAdminCreateUserOnly: true
             AutoVerifiedAttributes:
                 - email
             Schema:
